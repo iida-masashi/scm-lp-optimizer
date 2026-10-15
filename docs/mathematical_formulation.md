@@ -8,9 +8,9 @@
 
 - $p \in \{0, \dots, N-1\}$: 計画対象となる **拠点×品目ペア** `(location, sku)` の集合（辞書順ソート）。
   - 各ノード $p$ はマスタ定義に基づき、以下の3つの供給能力フラグを持ちます：
-    - $\text{can\_produce}_p \in \{\text{true}, \text{false}\}$: 当該拠点に製造能力 (`max_capacity`) があり、かつ親品目として BOM が定義されている場合 `true`
-    - $\text{can\_replenish}_p \in \{\text{true}, \text{false}\}$: 当該拠点・品目を着地 (`to_location`, `sku`) とする輸送ルートが存在する場合 `true`
-    - $\text{can\_procure}_p \in \{\text{true}, \text{false}\}$: 外部サプライヤーからの購買調達が可能である場合 `true`（`item_locations.can_procure` で明示指定可能。未指定時は「製造も拠点間補充もされず、どの拠点でも製造品目として登録されていない原材料SKU」が自動的に `true` となります）
+    - `can_produce` ($\text{canProduce}_p \in \{\text{true}, \text{false}\}$): 当該拠点に製造能力 (`max_capacity`) があり、かつ親品目として BOM が定義されている場合 `true`
+    - `can_replenish` ($\text{canReplenish}_p \in \{\text{true}, \text{false}\}$): 当該拠点・品目を着地 (`to_location`, `sku`) とする輸送ルートが存在する場合 `true`
+    - `can_procure` ($\text{canProcure}_p \in \{\text{true}, \text{false}\}$): 外部サプライヤーからの購買調達が可能である場合 `true`（`item_locations.can_procure` で明示指定可能。未指定時は「製造も拠点間補充もされず、どの拠点でも製造品目として登録されていない原材料SKU」が自動的に `true` となります）
 - $t \in \{0, \dots, T-1\}$: 週次計画バケット（`week_start` の昇順ソート）。
   - **一様週次軸の検証**: 隣接する `week_start` の間隔がすべて **7日間** であることを求解前に検証します（欠落週や月次混在がある場合はリードタイムのシフトが歪むためエラーを返します）。
 - $e \in \mathcal{E}_{\text{tr}}$: 拠点間輸送エッジ $(p_{\text{src}}, p_{\text{dst}}, LT_e, \text{cost}_e)$ の集合。
@@ -20,7 +20,7 @@
 ## 2. 事前計算：下流需要伝播と安全在庫ターゲット
 
 ### 2.1 下流需要のトポロジカル逆伝播 (`propagate_downstream_demand`)
-各ノード $p$ の外生需要（顧客販売需要） $D_{p, t} = \max(0, \text{sales\_qty}_{p, t})$ に加え、安全在庫ターゲット計算用の実効需要 $\tilde{D}_{p, t}$ を、下流（消費側）から上流（供給側）へトポロジカル順序で逆伝播して算出します：
+各ノード $p$ の外生需要（顧客販売需要 `sales_qty`） $D_{p, t} = \max(0, \text{sales}_{p, t})$ に加え、安全在庫ターゲット計算用の実効需要 $\tilde{D}_{p, t}$ を、下流（消費側）から上流（供給側）へトポロジカル順序で逆伝播して算出します：
 
 - **輸送ルート $(p_{\text{src}} \to p_{\text{dst}}, LT_{\text{tr}}, q)$**:
   $$\tilde{D}_{p_{\text{src}}, t} \mathrel{+}= q \cdot \tilde{D}_{p_{\text{dst}}, t + LT_{\text{tr}}}$$
@@ -65,13 +65,13 @@ $$\min \sum_{p=0}^{N-1} \sum_{t=0}^{T-1} \left( c^P_{p, t} P_{p, t} + c^R_{p, t}
 
 各係数の決定ルールは以下の通りです：
 - **在庫保管コスト $c^I_{p, t}$**:
-  - 拠点に `holding_cost_rate` があり、品目に原価 `cost` がある場合は $\text{holding\_cost\_rate} \times \text{cost}$。
+  - 拠点に原価比例保管費率 `holding_cost_rate` ($r^{\text{hold}}_{\text{loc}}$) があり、品目に原価 `cost` ($\text{cost}_p$) がある場合は $r^{\text{hold}}_{\text{loc}} \times \text{cost}_p$。
   - それ以外は拠点の `holding_cost`、未指定時は `config.holding_cost`（デフォルト `1.0`）。
 - **生産コスト $c^P_{p, t}$**: 品目原価 `item_locations.cost`、未指定時は `config.production_cost`（デフォルト `5.0`）。
 - **外部調達コスト $c^E_{p, t}$**: `item_locations.procurement_unit_cost` ➔ `item_locations.cost` ➔ `config.procurement_cost`（デフォルト `0.1`）の優先順。
 - **輸送補充コスト $c^R_{p, t}$ / $c^{\text{tr}}_e$**: ルートの `transport_cost_per_unit`、未指定時は `config.replenishment_cost`（デフォルト `2.0`）。
 - **品切れペナルティ $c^U_{p, t}$**:
-  - 通常モード（`profit_maximization = false`）: $\max(\text{price}, \text{config.shortage\_penalty})$（デフォルト `1000.0`）。
+  - 通常モード（`profit_maximization = false`）: $\max(\text{price}_p, w_{\text{short}})$（ただし $w_{\text{short}}$ は `config.shortage_penalty`、デフォルト `1000.0`）。
   - 利益最大化モード（`profit_maximization = true`）: 品目単価 `price` が設定されている場合、品切れの機会損失コストをちょうど `price` とすることで、「限界利益（売価 − 原価 − 輸送・保管費）が正の需要のみを優先充足する」利益最大化と同値な最適化を行います。
   - **バックオーダー品目 (`backorder_skus`)**: 繰り越し1週間あたり `config.backlog_penalty_per_week`（デフォルト `50.0`）が加算され、さらにホライズン最終週 $t = T-1$ の未解消バックオーダーには `shortage_cost` が課されます。
 - **安全在庫割れペナルティ $c^{SS}_{p, t}$**: `config.ss_violation_penalty`（デフォルト `100.0`）。
@@ -99,8 +99,8 @@ $$I_{p, t} - I_{p, t-1} - P_{p, t} - R_{p, t} - E_{p, t - LT^{\text{proc}}_p} - 
 ### 5.2 製造ライン能力制約 ($A_{\text{ub}} x \le b_{\text{ub}}$)
 拠点・製造ライン `(loc, line)` に紐づく品目集合 $P_{\text{line}}$ について、週 $t$ の生産量はライン能力上限を超えません：
 
-- **時間ベース能力制約**（ラインの稼働可能時間 `available_hours_per_week` $> 0$ かつ全割当品目に `rate_per_hour` が定義されている場合）:
-  $$\sum_{p \in P_{\text{line}}} \frac{1}{\text{rate\_per\_hour}_p \times \text{yield\_rate}_p} P_{p, t} \le \text{Hours}_{\text{loc}, \text{line}, t}$$
+- **時間ベース能力制約**（ラインの稼働可能時間 `available_hours_per_week` $> 0$ かつ全割当品目に生産レート `rate_per_hour` ($r_p$) および歩留まり `yield_rate` ($\eta_p$) が定義されている場合）:
+  $$\sum_{p \in P_{\text{line}}} \frac{1}{r_p \times \eta_p} P_{p, t} \le \text{Hours}_{\text{loc}, \text{line}, t}$$
 - **数量ベース能力制約**（上記以外の場合）:
   $$\sum_{p \in P_{\text{line}}} P_{p, t} \le \text{Cap}_{\text{loc}, \text{line}, t}$$
 
@@ -121,8 +121,8 @@ $$I_{p, t} + SS_{p, t} \ge SS^{\text{target}}_{p, t} \quad \Longleftrightarrow \
 
 ## 6. シャドウプライス（潜在価格 / ボトルネック抽出）
 
-Clarabel の主双対内点法により得られた双対変数（Dual Variables）から、ライン能力・拠点能力・保管能力の各不等式制約に対する限界価値（Shadow Price = 右辺の能力を1単位増やしたときの目的関数改善額）を抽出します。
-- $|\text{marginal\_value}| > 10^{-4}$ となる制約を、アクティブなボトルネック（`bottlenecks`）として出力します。
+Clarabel の主双対内点法により得られた双対変数（Dual Variables）から、ライン能力・拠点能力・保管能力の各不等式制約に対する限界価値（Shadow Price = 右辺の能力を1単位増やしたときの目的関数改善額、`marginal_value`: $\pi$）を抽出します。
+- $|\pi| > 10^{-4}$ となる制約を、アクティブなボトルネック（`bottlenecks`）として出力します。
 
 ---
 

@@ -7,20 +7,50 @@
 
 ## 目次 (Table of Contents)
 
-1. [概要と特徴 (Overview & Key Features)](#1-概要と特徴-overview--key-features)
-2. [システムアーキテクチャと処理パイプライン (Architecture & Pipeline)](#2-システムアーキテクチャと処理パイプライン-architecture--pipeline)
-3. [対象とするサプライチェーンネットワーク (Supply Chain Network Model)](#3-対象とするサプライチェーンネットワーク-supply-chain-network-model)
-4. [数理最適化モデルの概要 (Mathematical Formulation Summary)](#4-数理最適化モデルの概要-mathematical-formulation-summary)
-5. [実務制約を満たす4段階ポスト処理 (Post-Processing Pipeline)](#5-実務制約を満たす4段階ポスト処理-post-processing-pipeline)
-6. [入出力データ仕様サマリ (Input / Output Schema)](#6-入出力データ仕様サマリ-input--output-schema)
-7. [サンプルデータによる動作ウォークスルー (End-to-End Walkthrough)](#7-サンプルデータによる動作ウォークスルー-end-to-end-walkthrough)
-8. [クイックスタート・実行方法 (Quick Start & Usage)](#8-クイックスタート実行方法-quick-start--usage)
-9. [Google Cloud Run デプロイと Python 連携 (Cloud Run & Python Integration)](#9-google-cloud-run-デプロイと-python-連携-cloud-run--python-integration)
-10. [ディレクトリ構成と詳細ドキュメント (Repository Structure & Docs)](#10-ディレクトリ構成と詳細ドキュメント-repository-structure--docs)
+1. [想定利用シーンと想定効果 (Target Use Cases & Expected Impact)](#1-想定利用シーンと想定効果-target-use-cases--expected-impact)
+2. [概要と特徴 (Overview & Key Features)](#2-概要と特徴-overview--key-features)
+3. [システムアーキテクチャと処理パイプライン (Architecture & Pipeline)](#3-システムアーキテクチャと処理パイプライン-architecture--pipeline)
+4. [対象とするサプライチェーンネットワーク (Supply Chain Network Model)](#4-対象とするサプライチェーンネットワーク-supply-chain-network-model)
+5. [数理最適化モデルの概要 (Mathematical Formulation Summary)](#5-数理最適化モデルの概要-mathematical-formulation-summary)
+6. [実務制約を満たす4段階ポスト処理 (Post-Processing Pipeline)](#6-実務制約を満たす4段階ポスト処理-post-processing-pipeline)
+7. [入出力データ仕様サマリ (Input / Output Schema)](#7-入出力データ仕様サマリ-input--output-schema)
+8. [サンプルデータによる動作ウォークスルー (End-to-End Walkthrough)](#8-サンプルデータによる動作ウォークスルー-end-to-end-walkthrough)
+9. [クイックスタート・実行方法 (Quick Start & Usage)](#9-クイックスタート実行方法-quick-start--usage)
+10. [Google Cloud Run デプロイと Python 連携 (Cloud Run & Python Integration)](#10-google-cloud-run-デプロイと-python-連携-cloud-run--python-integration)
+11. [ディレクトリ構成と詳細ドキュメント (Repository Structure & Docs)](#11-ディレクトリ構成と詳細ドキュメント-repository-structure--docs)
 
 ---
 
-## 1. 概要と特徴 (Overview & Key Features)
+## 1. 想定利用シーンと想定効果 (Target Use Cases & Expected Impact)
+
+### 1.1 想定利用シーン (Target Use Cases)
+
+本エンジンは、製造業・流通業・小売業における以下のようなサプライチェーン計画業務およびシステム基盤のコアエンジンとして利用することを想定しています。
+
+1. **週次 S&OP（Sales & Operations Planning / 生販在計画）における高速 What-If シミュレーション**
+   * 需要の上振れ・下振れ、特定工場の定期修繕・突発設備停止、原材料の調達制約などが発生した際、複数のシナリオ（需要ケース × 設備能力ケース × 安全在庫方針）をリアルタイム（数ミリ秒〜数十ミリ秒）で再計算し、会議の場で即座に比較・意思決定を行うシーン。
+2. **無制限 MRP（資材所要量計画）から能力制約付き計画（Finite Capacity Planning）への高度化**
+   * 既存の ERP / MRP システムが出力する「設備能力や倉庫容量を考慮しない山積み要求量（無制約計画）」に対し、製造ラインの週間稼働時間上限、複数工場・複数サプライヤーへの発注配分（クォータ）、最小ロット（MOQ）・刻みロットを考慮した**実行可能な生産・補充・調達計画**へ自動変換するシーン。
+3. **複数階層ネットワーク（工場 ➔ 中央倉庫 ➔ 地域DC）の在庫配置・補充計画の全体最適化**
+   * 各拠点が個別に発注判断を行うことによるブルウィップ効果や拠点間の在庫偏在（あるDCでは欠品し、別のDCや工場では過剰在庫になる事象）を防ぎ、輸送リードタイム・製造リードタイム・品目別利益率（マージン）を踏まえたネットワーク全体の最適配分を算出するシーン。
+4. **設備投資・残業・外注判断のためのボトルネック定量評価（Shadow Price 分析）**
+   * 計画期間を通じて「どの工場・どのライン・どの週の能力が全体の供給を律速しているか」を特定し、双対変数（潜在価格: `marginal_value`）を用いて「その週のライン稼働時間を1時間増強（残業・休日出勤・外注化）すれば、欠品回避やコスト削減によって全体利益がいくら改善するか」を定量的に評価するシーン。
+5. **既存の Python 製 SCM Web アプリケーションやデータパイプラインへのソルバー組み込み**
+   * Streamlit / FastAPI / Django 等の Python アプリケーションや夜間バッチ処理から、C/C++ 共有ライブラリの環境依存問題や商用ソルバーの高額なライセンス制約を受けることなく、ステートレスな Cloud Run マイクロサービスまたは単一 CLI バイナリとして呼び出すシーン。
+
+### 1.2 想定効果 (Expected Business & System Impact)
+
+| 観点 | 従来の課題（Excel 手作業 / 無制約 MRP / Python+外部ソルバー） | `scm-lp-optimizer` 導入による想定効果 |
+| :--- | :--- | :--- |
+| **計画立案リードタイムと試行回数** | 週次計画の調整・山崩しに数時間〜数日を要し、1サイクルで1〜2パターンの検証が限界。 | 中規模ネットワークで **1ミリ秒〜数十ミリ秒** で求解完了。対話的なUI上でのリアルタイム再計算や、数百パターンのパラメトリックな一括 What-If シミュレーションが可能。 |
+| **欠品削減と在庫適正化の両立** | 欠品を防ぐために一律に過大な安全在庫を持つか、逆に能力不足を見落として直前で欠品が発生。 | 需要伝播に基づく動的安全性在庫ターゲットと多段階リードタイムを厳密に同期。高収益品目への優先能力割当により、**欠品（機会損失）の最小化と過剰在庫の抑制**を同時に達成。 |
+| **現場実行可能性（ロット・能力整合）** | LP の連続解（小数）をそのまま現場に出せず、丸めると設備能力超過や上流部品不足が発生。 | 4段階ポスト処理（MOQ/刻みロット丸め ➔ 利益順の能力クリップ ➔ 上流供給連動クリップ ➔ 過剰在庫クリップ）により、**そのまま発注・製造指示に使える整数ロット計画**を出力。 |
+| **ボトルネック可視化と意思決定の迅速化** | どこが真のボトルネックか担当者の経験と勘に依存し、残業・外注判断の投資対効果が不明確。 | 内点法の双対解（Shadow Price）を自動抽出し、**設備・倉庫・週ごとの「能力1単位あたりの限界価値」を数値化**。客観的根拠に基づく迅速な能力増強判断を実現。 |
+| **システム運用・インフラ保守性** | Python 環境での CBC / GLPK / HiGHS 等のネイティブ依存エラー、プロセス起動の遅さ、コンテナ肥大化。 | **Pure Rust (`clarabel`) による単一静的バイナリ & 軽量コンテナ**。OS 依存の共有ライブラリが一切不要で、Google Cloud Run 等のサーバーレス環境でコールドスタート・メモリ消費ともに極小化。 |
+
+---
+
+## 2. 概要と特徴 (Overview & Key Features)
 
 `scm-lp-optimizer` は、サプライヤー・製造工場・配送センター（DC）など複数の拠点にまたがる多段階サプライチェーンにおいて、**需要を満たしつつ、製造能力・倉庫保管能力・輸送リードタイム・BOM（部品表）・安全在庫目標・ロットサイズ制約を同時に考慮した最適需給計画（生産計画・補充輸送計画・調達発注計画）** を高速に算出する汎用エンジンです。
 
@@ -41,7 +71,7 @@
 
 ---
 
-## 2. システムアーキテクチャと処理パイプライン (Architecture & Pipeline)
+## 3. システムアーキテクチャと処理パイプライン (Architecture & Pipeline)
 
 本エンジンは、入力された JSON（または CSV から変換された JSON）に対し、以下の **4段階のパイプライン** を経て最適計画と変更差分（`edits`）およびボトルネック情報（`bottlenecks`）を生成します。
 
@@ -67,7 +97,7 @@ flowchart LR
 
 ---
 
-## 3. 対象とするサプライチェーンネットワーク (Supply Chain Network Model)
+## 4. 対象とするサプライチェーンネットワーク (Supply Chain Network Model)
 
 本エンジンは、任意の拠点階層（サプライヤー ➔ 部品工場 ➔ 組立工場 ➔ 中央倉庫 ➔ 地域DC など）および多段階 BOM を表現できます。以下は同梱サンプル（[`examples/basic_2echelon_request.json`](examples/basic_2echelon_request.json)）のネットワーク構造です。
 
@@ -101,11 +131,11 @@ flowchart LR
 
 ---
 
-## 4. 数理最適化モデルの概要 (Mathematical Formulation Summary)
+## 5. 数理最適化モデルの概要 (Mathematical Formulation Summary)
 
 詳細な数式定義は [`docs/mathematical_formulation.md`](docs/mathematical_formulation.md) を参照してください。ここではモデルの中核構造を解説します。
 
-### 4.1 主な決定変数（各拠点 $l$・品目 $s$・週 $t \in \{0, \dots, T-1\}$）
+### 5.1 主な決定変数（各拠点 $l$・品目 $s$・週 $t \in \{0, \dots, T-1\}$）
 
 すべての決定変数は非負連続変数（$\ge 0$）として定義されます。
 
@@ -122,7 +152,7 @@ flowchart LR
 | $U^{\text{bo}}_{l,s,t}$ | `U_bo` | 期首バックオーダー（過去未納分）のうち週 $t$ 末時点で未解消の残高 |
 | $UF_{r,t}$ | `UF` | 輸送ルート $r$ における上流在庫不足スラック（ファントム輸送防止ペナルティ用） |
 
-### 4.2 目的関数（最小化）
+### 5.2 目的関数（最小化）
 
 LPソルバーは以下の総コスト関数 $Z$ を最小化します（利益考慮モード `enable_margin_Sort = true` の場合は、限界利益 $(p - c)$ に応じて需要充足インセンティブが自動調整されます）：
 
@@ -145,25 +175,25 @@ $$
   3. その上で、**製造原価・調達単価・輸送コスト・在庫保管費 (`holding_cost`)・過剰在庫ペナルティ (`excess_inventory_penalty`)・週次変動ペナルティ (`smoothing_penalty`)** の総和が最小となる生産・輸送・調達タイミングが選択されます。
   4. 最終週（$t = T-1$）の期末在庫には `terminal_inventory_penalty_weight` が加算され、計画期間末に不要な在庫を積み上げる挙動を防止します。
 
-### 4.3 主要な制約条件
+### 5.3 主要な制約条件
 
 1. **多段階在庫バランス等式（物質収支）**:
    * 各拠点・品目・週において、「期首在庫（または前週期末在庫）＋ 当週生産入庫 $P_{l,s,t}$ ＋ 当週補充入庫 $R_{l,s,t}$ ＋ 確定入荷予定 $SR_{l,s,t}$ ＋ 欠品スラック $U_{l,s,t}$ ＝ 外部販売需要 $Dem_{l,s,t}$ ＋ BOM従属需要（親品目の生産に伴う消費量）＋ 下流拠点への輸送出荷量 ＋ 当週期末在庫 $I_{l,s,t}$」を厳密に満たします。
-   * **製造リードタイム ($LT^{\text{prod}}$)・歩留まり (`yield_rate`)・スクラップ率 (`scrap_rate`)**: 親品目 $p$ が週 $t + LT^{\text{prod}}$ に完成するためには、週 $t$ に着手が必要であり、その時点で子品目 $c$ が $\frac{\text{quantity}}{\text{yield\_rate} \times (1 - \text{scrap\_rate})}$ だけ消費されます。
+   * **製造リードタイム ($LT^{\text{prod}}$)・歩留まり (`yield_rate`: $\eta$)・スクラップ率 (`scrap_rate`: $s$)**: 親品目 $p$ が週 $t + LT^{\text{prod}}$ に完成するためには、週 $t$ に着手が必要であり、その時点で子品目 $c$（基準員数 `quantity`: $q$）が $\frac{q}{\eta \times (1 - s)}$ だけ消費されます。
 2. **輸送ルート整合性と配分比率（Quota）制約**:
    * 下流拠点への輸送補充 $R_{l,s,t}$ は、各上流拠点からの到着輸送量 $\sum_r TR_{r,t}$ と一致します。
    * 複数の輸送ルートに `quota_pct`（配分比率）が設定されている場合、指定された比率に従って調達先を按分します。
 3. **製造ライン能力制約（時間ベース / 数量ベース両対応）**:
-   * 製造ライン $(l, \text{line\_id})$ に週間稼働可能時間 `available_hours_per_week` と BOM の時間あたり生産レート `rate_per_hour` が設定されている場合は **時間ベース能力制約**（$\sum_s \frac{P_{l,s,t}}{\text{rate\_per\_hour}} \le \text{available\_hours}$）を適用し、未設定の場合は **数量ベース能力制約**（$\sum_s P_{l,s,t} \le \text{max\_capacity}$）を適用します。
+   * 製造ライン $(l, \text{line})$（`line_id`）に週間稼働可能時間 `available_hours_per_week` ($H^{\text{avail}}_{l,\text{line},t}$) と BOM の時間あたり生産レート `rate_per_hour` ($r_s$) が設定されている場合は **時間ベース能力制約**（$\sum_s \frac{P_{l,s,t}}{r_s \cdot \eta_s} \le H^{\text{avail}}_{l,\text{line},t}$）を適用し、未設定の場合は **数量ベース能力制約**（$\sum_s P_{l,s,t} \le C^{\max}_{l,\text{line},t}$、`max_capacity`）を適用します。
    * 週別のカレンダー能力変更（定期修繕や休日稼働など）は `capacity_overrides` で週単位に上書き可能です。
 4. **倉庫保管能力制約 (`max_storage_capacity`) & 週間調達能力制約 (`weekly_procurement_capacity`)**:
-   * 拠点全体の期末在庫合計 $\sum_s I_{l,s,t} \le \text{max\_storage\_capacity}_l$、およびサプライヤーからの週間発注上限を遵守します。
+   * 拠点全体の期末在庫合計 $\sum_s I_{l,s,t} \le C^{\text{stor}}_l$（`max_storage_capacity`）、およびサプライヤーからの週間発注上限を遵守します。
 5. **確定期間フェンス（Frozen Fence）**:
    * `production_fence_weeks` や `replenishment_fence_weeks` で指定された直近の数週間については、計画値を既存の入力値に固定し、直近の現場確定計画が勝手に変更されるのを防ぎます。
 
 ---
 
-## 5. 実務制約を満たす4段階ポスト処理 (Post-Processing Pipeline)
+## 6. 実務制約を満たす4段階ポスト処理 (Post-Processing Pipeline)
 
 内点法ソルバーが出力した連続最適解（小数を含む実数値）を、現場でそのまま実行可能な整数ロット計画へ変換するため、[`src/postprocess.rs`](src/postprocess.rs) において以下の4段階のポスト処理を順次実行します。
 
@@ -176,11 +206,11 @@ $$
 
 ---
 
-## 6. 入出力データ仕様サマリ (Input / Output Schema)
+## 7. 入出力データ仕様サマリ (Input / Output Schema)
 
 全フィールドの型・デフォルト値・業務上の意味については [`docs/data_dictionary.md`](docs/data_dictionary.md) に網羅されています。
 
-### 6.1 リクエスト JSON (`OptimizeRequestPayload`) の構成要素
+### 7.1 リクエスト JSON (`OptimizeRequestPayload`) の構成要素
 
 | トップレベルキー | 必須 | 説明 |
 | :--- | :---: | :--- |
@@ -196,7 +226,7 @@ $$
 | `capacity_overrides` | 任意 | 特定の拠点・ライン・週における製造能力上限の一時変更（カレンダー例外）。 |
 | `backorder_skus` | 任意 | 計画開始時点で未納となっている期首バックオーダー残高。 |
 
-### 6.2 レスポンス JSON (`OptimizeResponsePayload`) の構成要素
+### 7.2 レスポンス JSON (`OptimizeResponsePayload`) の構成要素
 
 | トップレベルキー | 型 | 説明 |
 | :--- | :--- | :--- |
@@ -208,11 +238,11 @@ $$
 
 ---
 
-## 7. サンプルデータによる動作ウォークスルー (End-to-End Walkthrough)
+## 8. サンプルデータによる動作ウォークスルー (End-to-End Walkthrough)
 
 同梱されている [`examples/basic_2echelon_request.json`](examples/basic_2echelon_request.json)（および [`templates/csv/`](templates/csv/)）を実際に実行した際の入出力結果です。
 
-### 7.1 シナリオ設定
+### 8.1 シナリオ設定
 * **拠点と品目**:
   * 工場 `PLANT-A` で原材料 `RAW-1`（初期在庫 `100`、外部調達LT `0週`）を調達し、生産ライン `LINE-FG` で完成品 `FG-1`（初期在庫 `50`、製造LT `0週`、BOM: `FG-1` 1個につき `RAW-1` 2個消費）を生産。
   * 配送センター `DC-EAST`（初期在庫 `80`、Week 1 に確定入荷 `20` あり、安全在庫目標 `0.5週分`）へ、`PLANT-A` から輸送リードタイム **1週間** で `FG-1` を補充輸送。
@@ -222,7 +252,7 @@ $$
   * Week 3 (`2026-01-19`): `150`
   * Week 4 (`2026-01-26`): `120`
 
-### 7.2 通常能力下での最適化結果（計算時間: `0 ms`）
+### 8.2 通常能力下での最適化結果（計算時間: `0 ms`）
 
 | 拠点 | 品目 | 週 (`week_start`) | 販売需要 | 生産量 (`production_qty`) | 補充入荷量 (`replenishment_qty`) | 発注リリース (`order_release_qty`) | 数理モデルの動き（物質収支とLTシフト） |
 | :--- | :--- | :--- | ---: | ---: | ---: | ---: | :--- |
@@ -239,7 +269,7 @@ $$
 | **`PLANT-A`** | `RAW-1` | `2026-01-19` | 0 | 0 | **220** | **220** | `FG-1` 110個生産（従属需要 220個）に合わせて 220個を調達 |
 | **`PLANT-A`** | `RAW-1` | `2026-01-26` | 0 | 0 | 0 | 0 | 余剰在庫ゼロで計画期間を終了 |
 
-### 7.3 設備能力ボトルネック発生時の Shadow Price 出力例
+### 8.3 設備能力ボトルネック発生時の Shadow Price 出力例
 
 もし `PLANT-A` のライン稼働時間を制限し、週間最大生産能力が不足する状態（例: 週間上限 20個）で実行すると、`bottlenecks` フィールドに以下のような双対変数（潜在価格）が出力されます：
 
@@ -264,13 +294,13 @@ $$
 
 ---
 
-## 8. クイックスタート・実行方法 (Quick Start & Usage)
+## 9. クイックスタート・実行方法 (Quick Start & Usage)
 
-### 8.1 前提条件
+### 9.1 前提条件
 * **Rust ツールチェーン**: Rust 1.80 以上（`rustup` 経由でのインストールを推奨）
 * **Python 3.9 以上**（任意：CSV テンプレートから JSON への変換スクリプト [`templates/csv_to_json.py`](templates/csv_to_json.py) を使用する場合のみ。外部パッケージ不要）
 
-### 8.2 ビルドと自動テストの実行
+### 9.2 ビルドと自動テストの実行
 
 ```bash
 # 全テストスイート（ゴールデンテスト・能力ボトルネック検証・週次カレンダー検証等）の実行
@@ -284,7 +314,7 @@ cargo build --release --bins
 * `scm-lp-cli`（Windows では `scm-lp-cli.exe`）
 * `scm-lp-server`（Windows では `scm-lp-server.exe`）
 
-### 8.3 CLI モードでの実行 (`scm-lp-cli`)
+### 9.3 CLI モードでの実行 (`scm-lp-cli`)
 
 ```bash
 # 1. 入力ファイルと出力ファイルを指定して実行
@@ -296,7 +326,7 @@ cargo build --release --bins
 ./target/release/scm-lp-cli --input examples/basic_2echelon_request.json
 ```
 
-### 8.4 Excel / CSV テンプレートを用いたワークフロー
+### 9.4 Excel / CSV テンプレートを用いたワークフロー
 
 JSON を直接記述する代わりに、`templates/csv/` フォルダ内の CSV ファイル群を表計算ソフト（Excel / Google スプレッドシート等）で編集し、同梱の Python スクリプトでリクエスト JSON に一括変換できます。
 
@@ -326,11 +356,11 @@ python templates/csv_to_json.py \
 
 ---
 
-## 9. Google Cloud Run デプロイと Python 連携 (Cloud Run & Python Integration)
+## 10. Google Cloud Run デプロイと Python 連携 (Cloud Run & Python Integration)
 
 より詳細な手順や IAM 認証設定については [`docs/cloud_run_deployment.md`](docs/cloud_run_deployment.md) を参照してください。
 
-### 9.1 Docker コンテナのビルドとローカル起動
+### 10.1 Docker コンテナのビルドとローカル起動
 
 同梱の [`Dockerfile`](Dockerfile) はマルチステージビルド（`rust:1.83-slim-bookworm` ➔ `debian:bookworm-slim`）を採用しており、最小限のランタイムイメージを生成します。
 
@@ -342,7 +372,7 @@ docker build -t scm-lp-optimizer:latest .
 docker run --rm -p 8080:8080 -e PORT=8080 scm-lp-optimizer:latest
 ```
 
-### 9.2 エンドポイント仕様
+### 10.2 エンドポイント仕様
 
 * **`GET /health`**: ヘルスチェック用エンドポイント
   ```json
@@ -353,7 +383,7 @@ docker run --rm -p 8080:8080 -e PORT=8080 scm-lp-optimizer:latest
   * Response Body (HTTP 200): `OptimizeResponsePayload` JSON
   * Response Body (HTTP 400): 入力検証エラー（週次軸の不整合など）の詳細メッセージ
 
-### 9.3 Python（openSCM 等）からの呼び出しコード例
+### 10.3 Python（openSCM 等）からの呼び出しコード例
 
 ```python
 import json
@@ -382,7 +412,7 @@ for b in result["bottlenecks"]:
 
 ---
 
-## 10. ディレクトリ構成と詳細ドキュメント (Repository Structure & Docs)
+## 11. ディレクトリ構成と詳細ドキュメント (Repository Structure & Docs)
 
 ```text
 scm-lp-optimizer/
