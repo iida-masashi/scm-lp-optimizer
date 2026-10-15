@@ -1,0 +1,4 @@
+location,sku,can_procure,production_lt,safety_lt_weeks,min_production_qty,production_lot_size,min_procurement_qty,purchase_lot_size,weekly_procurement_capacity,procurement_lt_weeks,safety_stock_weeks,excess_inventory_buffer_ratio,price,cost,procurement_unit_cost
+PLANT-A,RAW-1,true,,,,,20,20,,0,,,,,1.0
+PLANT-A,FG-1,,0,0,10,10,,,,,,,20.0,3.0,
+DC-EAST,FG-1,,,,,,,,,,0.5,1.2,20.0,,

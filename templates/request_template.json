@@ -1,0 +1,118 @@
+{
+  "config": {
+    "holding_cost": 1.0,
+    "shortage_penalty": 1000.0,
+    "procurement_cost": 0.1,
+    "production_cost": 5.0,
+    "replenishment_cost": 2.0,
+    "ss_violation_penalty": 100.0,
+    "backlog_penalty_per_week": 50.0,
+    "plan_stability_lambda": 0.0,
+    "profit_maximization": false,
+    "terminal_lookback_weeks": 4,
+    "formulation_mode": "scipy"
+  },
+  "facts": [
+    {
+      "location": "LOC_CODE",
+      "sku": "SKU_CODE",
+      "week_start": "2026-01-05",
+      "sales_qty": 0.0,
+      "dependent_demand_qty": 0.0,
+      "production_qty": 0,
+      "replenishment_qty": 0,
+      "production_request": null,
+      "replenishment_request": null,
+      "order_release_qty": null,
+      "safety_stock_weeks": null,
+      "production_fence_weeks": 0,
+      "replenishment_fence_weeks": 0
+    }
+  ],
+  "lines": [
+    {
+      "location": "LOC_CODE",
+      "line_id": "LINE_01",
+      "max_capacity": 1000.0,
+      "available_hours_per_week": 120.0
+    }
+  ],
+  "bom": [
+    {
+      "target_location": "LOC_CODE",
+      "parent_sku": "PARENT_SKU",
+      "child_sku": "CHILD_SKU",
+      "quantity": 1.0,
+      "line_id": "LINE_01",
+      "rate_per_hour": 10.0,
+      "yield_rate": 1.0,
+      "scrap_rate": 0.0
+    }
+  ],
+  "transport_routes": [
+    {
+      "from_location": "SRC_LOC",
+      "to_location": "DST_LOC",
+      "sku": "SKU_CODE",
+      "transport_lt": 1,
+      "transport_cost_per_unit": 0.5,
+      "min_shipping_qty": 10,
+      "shipping_lot_size": 10,
+      "quota_pct": null
+    }
+  ],
+  "item_locations": [
+    {
+      "location": "LOC_CODE",
+      "sku": "SKU_CODE",
+      "can_procure": null,
+      "production_lt": 0,
+      "safety_lt_weeks": 0,
+      "min_production_qty": 0,
+      "production_lot_size": 1,
+      "min_procurement_qty": 0,
+      "purchase_lot_size": 1,
+      "weekly_procurement_capacity": null,
+      "procurement_lt_weeks": 0,
+      "safety_stock_weeks": 1.0,
+      "excess_inventory_buffer_ratio": 1.2,
+      "price": 100.0,
+      "cost": 40.0,
+      "procurement_unit_cost": 25.0
+    }
+  ],
+  "locations": [
+    {
+      "location": "LOC_CODE",
+      "holding_cost": 1.0,
+      "holding_cost_rate": null,
+      "max_storage_capacity": 5000.0
+    }
+  ],
+  "init_inventory": [
+    {
+      "location": "LOC_CODE",
+      "sku": "SKU_CODE",
+      "qty": 100.0
+    }
+  ],
+  "scheduled_receipts": [
+    {
+      "location": "LOC_CODE",
+      "sku": "SKU_CODE",
+      "due_week": "2026-01-05",
+      "qty": 50.0
+    }
+  ],
+  "backorder_skus": [],
+  "capacity_overrides": [
+    {
+      "location": "LOC_CODE",
+      "line_id": "LINE_01",
+      "week_start": "2026-01-05",
+      "max_capacity": 800.0
+    }
+  ],
+  "request_map": [],
+  "request_kind_map": []
+}

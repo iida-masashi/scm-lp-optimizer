@@ -1,0 +1,27 @@
+[package]
+name = "scm-lp-optimizer"
+version = "0.1.0"
+edition = "2021"
+description = "Standalone Multi-Period Capacitated Supply Chain LP Optimizer in Pure Rust"
+license = "MIT"
+
+[lib]
+name = "scm_lp_optimizer"
+path = "src/lib.rs"
+
+[[bin]]
+name = "scm-lp-server"
+path = "src/bin/server.rs"
+
+[[bin]]
+name = "scm-lp-cli"
+path = "src/bin/cli.rs"
+
+[dependencies]
+clarabel = "0.9"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+axum = "0.7"
+tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "net", "signal"] }
+thiserror = "1.0"

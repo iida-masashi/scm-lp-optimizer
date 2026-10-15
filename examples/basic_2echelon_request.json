@@ -1,0 +1,118 @@
+{
+  "config": {
+    "holding_cost": 1.0,
+    "shortage_penalty": 1000.0,
+    "procurement_cost": 0.1,
+    "production_cost": 5.0,
+    "replenishment_cost": 2.0,
+    "ss_violation_penalty": 100.0,
+    "backlog_penalty_per_week": 50.0,
+    "plan_stability_lambda": 0.0,
+    "profit_maximization": false,
+    "terminal_lookback_weeks": 4,
+    "formulation_mode": "scipy"
+  },
+  "facts": [
+    { "location": "PLANT-A", "sku": "RAW-1", "week_start": "2026-01-05", "sales_qty": 0.0, "production_qty": 0, "replenishment_qty": 0 },
+    { "location": "PLANT-A", "sku": "RAW-1", "week_start": "2026-01-12", "sales_qty": 0.0, "production_qty": 0, "replenishment_qty": 0 },
+    { "location": "PLANT-A", "sku": "RAW-1", "week_start": "2026-01-19", "sales_qty": 0.0, "production_qty": 0, "replenishment_qty": 0 },
+    { "location": "PLANT-A", "sku": "RAW-1", "week_start": "2026-01-26", "sales_qty": 0.0, "production_qty": 0, "replenishment_qty": 0 },
+
+    { "location": "PLANT-A", "sku": "FG-1", "week_start": "2026-01-05", "sales_qty": 0.0, "production_qty": 0, "replenishment_qty": 0 },
+    { "location": "PLANT-A", "sku": "FG-1", "week_start": "2026-01-12", "sales_qty": 0.0, "production_qty": 0, "replenishment_qty": 0 },
+    { "location": "PLANT-A", "sku": "FG-1", "week_start": "2026-01-19", "sales_qty": 0.0, "production_qty": 0, "replenishment_qty": 0 },
+    { "location": "PLANT-A", "sku": "FG-1", "week_start": "2026-01-26", "sales_qty": 0.0, "production_qty": 0, "replenishment_qty": 0 },
+
+    { "location": "DC-EAST", "sku": "FG-1", "week_start": "2026-01-05", "sales_qty": 0.0, "production_qty": 0, "replenishment_qty": 0 },
+    { "location": "DC-EAST", "sku": "FG-1", "week_start": "2026-01-12", "sales_qty": 100.0, "production_qty": 0, "replenishment_qty": 0 },
+    { "location": "DC-EAST", "sku": "FG-1", "week_start": "2026-01-19", "sales_qty": 150.0, "production_qty": 0, "replenishment_qty": 0 },
+    { "location": "DC-EAST", "sku": "FG-1", "week_start": "2026-01-26", "sales_qty": 120.0, "production_qty": 0, "replenishment_qty": 0 }
+  ],
+  "lines": [
+    {
+      "location": "PLANT-A",
+      "line_id": "LINE-FG",
+      "max_capacity": 180.0,
+      "available_hours_per_week": 90.0
+    }
+  ],
+  "bom": [
+    {
+      "target_location": "PLANT-A",
+      "parent_sku": "FG-1",
+      "child_sku": "RAW-1",
+      "quantity": 2.0,
+      "line_id": "LINE-FG",
+      "rate_per_hour": 2.0,
+      "yield_rate": 1.0,
+      "scrap_rate": 0.0
+    }
+  ],
+  "transport_routes": [
+    {
+      "from_location": "PLANT-A",
+      "to_location": "DC-EAST",
+      "sku": "FG-1",
+      "transport_lt": 1,
+      "transport_cost_per_unit": 0.5,
+      "min_shipping_qty": 10,
+      "shipping_lot_size": 10,
+      "quota_pct": null
+    }
+  ],
+  "item_locations": [
+    {
+      "location": "PLANT-A",
+      "sku": "RAW-1",
+      "can_procure": true,
+      "min_procurement_qty": 20,
+      "purchase_lot_size": 20,
+      "procurement_lt_weeks": 0,
+      "procurement_unit_cost": 1.0
+    },
+    {
+      "location": "PLANT-A",
+      "sku": "FG-1",
+      "production_lt": 0,
+      "min_production_qty": 10,
+      "production_lot_size": 10,
+      "cost": 3.0,
+      "price": 20.0
+    },
+    {
+      "location": "DC-EAST",
+      "sku": "FG-1",
+      "safety_stock_weeks": 0.5,
+      "price": 20.0
+    }
+  ],
+  "locations": [
+    {
+      "location": "PLANT-A",
+      "holding_cost": 0.5,
+      "max_storage_capacity": 2000.0
+    },
+    {
+      "location": "DC-EAST",
+      "holding_cost": 0.8,
+      "max_storage_capacity": 1000.0
+    }
+  ],
+  "init_inventory": [
+    {
+      "location": "DC-EAST",
+      "sku": "FG-1",
+      "qty": 50.0
+    }
+  ],
+  "scheduled_receipts": [
+    {
+      "location": "PLANT-A",
+      "sku": "RAW-1",
+      "due_week": "2026-01-05",
+      "qty": 100.0
+    }
+  ],
+  "backorder_skus": [],
+  "capacity_overrides": []
+}

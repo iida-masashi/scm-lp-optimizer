@@ -1,0 +1,13 @@
+{
+  "holding_cost": 1.0,
+  "shortage_penalty": 1000.0,
+  "procurement_cost": 0.1,
+  "production_cost": 5.0,
+  "replenishment_cost": 2.0,
+  "ss_violation_penalty": 100.0,
+  "backlog_penalty_per_week": 50.0,
+  "plan_stability_lambda": 0.0,
+  "profit_maximization": false,
+  "terminal_lookback_weeks": 4,
+  "formulation_mode": "scipy"
+}

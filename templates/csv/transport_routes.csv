@@ -1,0 +1,2 @@
+from_location,to_location,sku,transport_lt,transport_cost_per_unit,min_shipping_qty,shipping_lot_size,quota_pct
+PLANT-A,DC-EAST,FG-1,1,0.5,10,10,

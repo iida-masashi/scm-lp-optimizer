@@ -1,0 +1,13 @@
+location,sku,week_start,sales_qty,dependent_demand_qty,production_qty,replenishment_qty,order_release_qty,safety_stock_weeks,production_fence_weeks,replenishment_fence_weeks
+PLANT-A,RAW-1,2026-01-05,0,0,0,0,,,,
+PLANT-A,RAW-1,2026-01-12,0,0,0,0,,,,
+PLANT-A,RAW-1,2026-01-19,0,0,0,0,,,,
+PLANT-A,RAW-1,2026-01-26,0,0,0,0,,,,
+PLANT-A,FG-1,2026-01-05,0,0,0,0,,,,
+PLANT-A,FG-1,2026-01-12,0,0,0,0,,,,
+PLANT-A,FG-1,2026-01-19,0,0,0,0,,,,
+PLANT-A,FG-1,2026-01-26,0,0,0,0,,,,
+DC-EAST,FG-1,2026-01-05,0,0,0,0,,,,
+DC-EAST,FG-1,2026-01-12,100,0,0,0,,,,
+DC-EAST,FG-1,2026-01-19,150,0,0,0,,,,
+DC-EAST,FG-1,2026-01-26,120,0,0,0,,,,

@@ -1,0 +1,2 @@
+target_location,parent_sku,child_sku,quantity,line_id,rate_per_hour,yield_rate,scrap_rate
+PLANT-A,FG-1,RAW-1,2.0,LINE-FG,2.0,1.0,0.0
