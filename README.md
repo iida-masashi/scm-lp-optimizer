@@ -3,6 +3,8 @@
 **Pure-Rust Multi-Period Capacitated Linear Programming (LP) Supply Chain Optimizer**  
 マルチ期間・能力制約付きサプライチェーン計画（S&OP / 需給計画 / 多段階MRP展開）のための、Pure Rust 製・線形計画（LP）最適化エンジンおよびマイクロサービスです。
 
+![SCM LP Optimizer 需給計画・稼働率・要因診断コンソール](docs/images/dashboard_overview.png)
+
 ---
 
 ## 目次 (Table of Contents)
@@ -66,9 +68,12 @@
   * 従来の Python + PuLP / CBC / GLPK / HiGHS のように OS 固有の C/C++ 共有ライブラリや外部ソルバーバイナリをインストールする必要がなく、単一の静的リンクバイナリまたは軽量コンテナとしてどこでも同一に動作します。
 * **圧倒的な計算速度（サブミリ秒〜数十ミリ秒）**:
   * 疎行列（CSC: Compressed Sparse Column）を Rust のメモリ上で直接構築し、プロセス起動や Python オブジェクト生成のオーバーヘッドなしに求解します。中規模ネットワークであれば **1ミリ秒未満〜数ミリ秒** で最適解に到達します。
-* **2つの実行インターフェースを標準同梱**:
+* **実行インターフェースと組み込み Web コンソールを標準同梱**:
   1. **スタンドアロン CLI (`scm-lp-cli`)**: ファイルまたは標準入力（`stdin`）から JSON を受け取り、最適化結果をファイルまたは標準出力（`stdout`）へ返却します。バッチ処理やデータパイプラインへの組み込みに最適です。
-  2. **ステートレス HTTP REST API サーバー (`scm-lp-server`)**: Google Cloud Run、AWS App Runner、Kubernetes 等のコンテナ環境向けに設計された Web API サーバー（`GET /health`, `POST /optimize`）です。
+  2. **ステートレス HTTP REST API サーバー & 組み込み Web コンソール (`scm-lp-server`)**: Google Cloud Run 等のコンテナ環境向けに設計された Web API サーバー（`GET /health`, `POST /optimize`, `POST /ask`）に加え、単一バイナリ内にビジネス向けモノトーン基調の **3画面 Web コンソール（`GET /`）** を同梱しています：
+     * **画面1：全体ダッシュボード**: 工場ライン別・週別の稼働率推移と上限到達ボトルネック（Shadow Price）、拠点間輸送フロー、サプライヤー発注量、拠点別欠品サマリを一画面で可視化。
+     * **画面2：SKUレベル PSI 明細ビュー**: 拠点×品目フィルタ・差分ハイライト付きの週次 PSI マトリクス（初期在庫・需要・入荷・生産・消費・出荷・期末在庫・安全在庫・欠品・発注・変更前初期値との差分）。
+     * **画面3：AI 要因診断・自然言語 Q&A コンソール**: 「なぜ欠品が発生するのか？」「どこがボトルネックか？」などの自然言語質問に対し、輸送リードタイム・BOM・ライン稼働率・潜在価格の因果トレース（Deterministic Root-Cause Trace）または Gemini API 連携による根拠数値付きの診断レポートを即座に回答。
 * **双対変数（Shadow Price / 潜在価格）によるボトルネック自動診断**:
   * 内点法の双対解（Dual Variables）から、製造ライン能力・倉庫保管能力・輸送ルート上限などの制約のうち「どの拠点の・どの設備の・どの週の能力が計画全体のボトルネックになっているか」および「その能力を1単位増強すると全体コスト（または利益）がいくら改善するか（限界価値: `marginal_value`）」を自動抽出します。
 * **LP連続緩和と実務ロット・能力制約の両立**:
@@ -319,7 +324,19 @@ cargo build --release --bins
 * `scm-lp-cli`（Windows では `scm-lp-cli.exe`）
 * `scm-lp-server`（Windows では `scm-lp-server.exe`）
 
-### 9.3 CLI モードでの実行 (`scm-lp-cli`)
+### 9.3 Web コンソール & REST API サーバーの起動 (`scm-lp-server`)
+
+```bash
+# Web コンソール & API サーバーの起動（デフォルト: http://localhost:8080/）
+cargo run --release --bin scm-lp-server
+```
+
+ブラウザで **`http://localhost:8080/`** を開くと、サンプルシナリオまたは任意の JSON ファイルを読み込んで最適化を実行し、以下の3画面を確認できます：
+1. **画面1：全体ダッシュボード**（生産工場ライン別・週別稼働率、拠点間輸送フロー、サプライヤー発注量、欠品サマリ）
+2. **画面2：SKUレベル PSI 明細ビュー**（拠点×品目フィルタ・差分ハイライト付きの週次 PSI マトリクス）
+3. **画面3：AI 要因診断・自然言語 Q&A コンソール**（「なぜ欠品が発生するのか？」等の自然言語質問に対する数理因果トレース & Gemini 連携回答）
+
+### 9.4 CLI モードでの実行 (`scm-lp-cli`)
 
 ```bash
 # 1. 入力ファイルと出力ファイルを指定して実行
@@ -331,7 +348,7 @@ cargo build --release --bins
 ./target/release/scm-lp-cli --input examples/basic_2echelon_request.json
 ```
 
-### 9.4 Excel / CSV テンプレートを用いたワークフロー
+### 9.5 Excel / CSV テンプレートを用いたワークフロー
 
 JSON を直接記述する代わりに、`templates/csv/` フォルダ内の CSV ファイル群を表計算ソフト（Excel / Google スプレッドシート等）で編集し、同梱の Python スクリプトでリクエスト JSON に一括変換できます。
 
@@ -379,14 +396,18 @@ docker run --rm -p 8080:8080 -e PORT=8080 scm-lp-optimizer:latest
 
 ### 10.2 エンドポイント仕様
 
+* **`GET /`**: 組み込み 3画面 Web コンソール（全体ダッシュボード / SKUレベル PSI 明細 / AI 要因診断 Q&A）
 * **`GET /health`**: ヘルスチェック用エンドポイント
   ```json
   {"engine": "clarabel-pure-rust", "service": "scm-lp-optimizer", "status": "ok"}
   ```
 * **`POST /optimize`**: 最適化実行エンドポイント（最大ペイロードサイズ: 64 MB）
   * Request Body: `OptimizeRequestPayload` JSON
-  * Response Body (HTTP 200): `OptimizeResponsePayload` JSON
+  * Response Body (HTTP 200): `OptimizeResponsePayload` JSON（`facts`, `edits`, `bottlenecks`, `analytics` を含む）
   * Response Body (HTTP 400): 入力検証エラー（週次軸の不整合など）の詳細メッセージ
+* **`POST /ask`**: 自然言語による欠品・ボトルネック要因診断エンドポイント
+  * Request Body: `AskRequestPayload` JSON（`question`, `request`, `response`）
+  * Response Body (HTTP 200): `AskResponsePayload` JSON（Markdown 診断回答、決定論的因果トレース `traces`、使用エンジン種別）
 
 ### 10.3 Python（openSCM 等）からの呼び出しコード例
 
@@ -432,10 +453,15 @@ scm-lp-optimizer/
 │   ├── lp_model.rs                    # LP変数・目的関数・等式/不等式制約の構築
 │   ├── solver_clarabel.rs             # Clarabel CSC疎行列変換・求解・双対変数抽出
 │   ├── postprocess.rs                 # ロット丸め後の能力/供給/過剰在庫クリッピング・結果書き戻し
+│   ├── analytics.rs                   # ライン別週次稼働率・輸送・発注・欠品・SKU別PSI明細集計
+│   ├── qa.rs                          # 自然言語Q&A・欠品/ボトルネックの決定論的因果トレース & Gemini連携
+│   ├── ui.html                        # 単一バイナリ組み込み 3画面 Web コンソール UI
 │   └── bin/
 │       ├── cli.rs                     # CLI バイナリ (scm-lp-cli)
-│       └── server.rs                  # HTTP REST サーバーバイナリ (scm-lp-server)
+│       └── server.rs                  # HTTP REST & Web UI サーバーバイナリ (scm-lp-server)
 ├── docs/
+│   ├── images/
+│   │   └── dashboard_overview.png     # Web コンソール画面スクリーンショット
 │   ├── mathematical_formulation.md    # 数理最適化モデル・定式化・ポスト処理の詳細解説
 │   ├── data_dictionary.md             # 入出力マスタ・トランザクション全項目リファレンス
 │   └── cloud_run_deployment.md        # Cloud Run デプロイ手順・Python連携ガイド
@@ -447,7 +473,7 @@ scm-lp-optimizer/
 │   ├── csv_to_json.py                 # CSV群から入力JSONを生成する変換スクリプト（標準ライブラリのみ）
 │   └── csv/                           # 表計算ソフト (Excel等) 用の CSV 入力テンプレート一式
 └── tests/
-    └── golden_test.rs                 # 統合テストスイート（4テストケース）
+    └── golden_test.rs                 # 統合テストスイート（5テストケース）
 ```
 
 ### 詳細ドキュメントリンク

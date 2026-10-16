@@ -212,7 +212,7 @@ fn build_deterministic_markdown(
         if !shortages.is_empty() {
             let mut s = String::new();
             s.push_str(&format!(
-                "### 🚨 欠品原因の因果トレース分析（総欠品量: {:.0} 個 / 需要充足率: {:.1}%）\n\n",
+                "### [重大異常] 欠品原因の因果トレース分析（総欠品量: {:.0} 個 / 需要充足率: {:.1}%）\n\n",
                 total_shortage, fill_rate
             ));
             s.push_str("サプライチェーンネットワークの上流（販売拠点 ➔ 輸送ルート・リードタイム ➔ 工場製造ライン能力 ➔ BOM原材料調達）を逆探索した結果、以下の**構造的ボトルネック**により欠品が発生しています。\n\n");
@@ -240,7 +240,7 @@ fn build_deterministic_markdown(
         } else if !ss_violations.is_empty() {
             let mut s = String::new();
             s.push_str(&format!(
-                "### ✅ 販売需要の欠品は 0 個（充足率 100.0%）、ただし安全在庫目標割れが {:.0} 個発生\n\n",
+                "### [注意] 販売需要の欠品は 0 個（充足率 100.0%）、ただし安全在庫目標割れが {:.0} 個発生\n\n",
                 total_ss_def
             ));
             s.push_str("顧客への販売欠品（Unfulfilled Demand）は発生していませんが、以下の拠点・週において期末在庫が**安全在庫目標（Safety Stock Target）**を下回っています。\n\n");
@@ -262,7 +262,7 @@ fn build_deterministic_markdown(
             sections.push(s);
         } else {
             let mut s = String::new();
-            s.push_str("### ✅ 欠品および安全在庫割れは発生していません（需要充足率 100.0%）\n\n");
+            s.push_str("### [正常] 欠品および安全在庫割れは発生していません（需要充足率 100.0%）\n\n");
             s.push_str(&format!(
                 "- 計画期間全体の総販売需要 **{:.0} 個** に対し、欠品量は **0 個**、安全在庫目標の未達も **0 個** です。\n",
                 total_sales
@@ -276,7 +276,7 @@ fn build_deterministic_markdown(
     if asks_line || asks_shortage {
         if !resp.line_utilizations.is_empty() {
             let mut s = String::new();
-            s.push_str("### 🏭 生産工場・ライン別の週次稼働率と能力ボトルネック\n\n");
+            s.push_str("### 生産工場・ライン別の週次稼働率と能力ボトルネック\n\n");
             s.push_str("| 工場拠点 | 製造ライン | 週 (`week_start`) | 稼働率 (%) | 使用時間 / 可能時間 (h) | 生産数量 / 上限数量 | ボトルネック判定 | 潜在価格 (Shadow Price) |\n");
             s.push_str("| :--- | :--- | :--- | ---: | ---: | ---: | :---: | ---: |\n");
             for lu in &resp.line_utilizations {
@@ -284,11 +284,11 @@ fn build_deterministic_markdown(
                     continue;
                 }
                 let badge = if lu.is_bottleneck {
-                    "🔴 **上限/律速**"
+                    "**[上限/律速]**"
                 } else if lu.utilization_pct >= 80.0 {
-                    "🟡 高負荷"
+                    "[高負荷]"
                 } else {
-                    "🟢 余裕あり"
+                    "適正"
                 };
                 s.push_str(&format!(
                     "| `{}` | `{}` | `{}` | **{:.1}%** | {:.1}h / {:.1}h | {} / {:.0} | {} | {:.2} |\n",
@@ -311,7 +311,7 @@ fn build_deterministic_markdown(
     // 3. Inter-location Transport section
     if asks_transport {
         let mut s = String::new();
-        s.push_str("### 🚚 拠点間の週次輸送量（出荷週 ➔ 到着週）\n\n");
+        s.push_str("### 拠点間の週次輸送量（出荷週 ➔ 到着週）\n\n");
         if resp.transport_flows.is_empty() {
             s.push_str("現在、拠点間の輸送ルート実績はありません。\n");
         } else {
@@ -343,7 +343,7 @@ fn build_deterministic_markdown(
             .collect();
         if !proc_rows.is_empty() {
             let mut s = String::new();
-            s.push_str("### 📦 外部サプライヤーへの発注量（Order Release）と調達入荷\n\n");
+            s.push_str("### 外部サプライヤーへの発注量（Order Release）と調達入荷\n\n");
             s.push_str("| 拠点 | 品目 (`sku`) | 週 (`week_start`) | 発注リリース量 (`order_release_qty`) | 調達入荷量 | 確定入荷予定 (`SR`) | BOM従属消費量 | 期末在庫 |\n");
             s.push_str("| :--- | :--- | :--- | ---: | ---: | ---: | ---: | ---: |\n");
             for r in proc_rows {
@@ -366,7 +366,7 @@ fn build_deterministic_markdown(
     // 5. Specific SKU / Location PSI table if mentioned in question
     if !matched_skus.is_empty() || !matched_locs.is_empty() {
         let mut s = String::new();
-        s.push_str("### 📊 該当拠点・SKUの週次 PSI 明細サマリ\n\n");
+        s.push_str("### 該当拠点・SKUの週次 PSI 明細サマリ\n\n");
         s.push_str("| 拠点 | SKU | 週 | 期首在庫 | 生産 | 輸送入荷 | 調達入荷 | 販売需要 | BOM消費 | 輸送出荷 | 期末在庫 | 安全在庫目標 | 欠品量 |\n");
         s.push_str("| :--- | :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |\n");
         for r in &resp.sku_psi_details {
@@ -397,7 +397,7 @@ fn build_deterministic_markdown(
     // 6. Actionable What-If prescriptions
     if !suggested_actions.is_empty() {
         let mut s = String::new();
-        s.push_str("### 💡 欠品・ボトルネック解消に向けた推奨アクション（What-If 処方箋）\n\n");
+        s.push_str("### 欠品・ボトルネック解消に向けた推奨アクション（What-If 処方箋）\n\n");
         for (i, act) in suggested_actions.iter().enumerate() {
             s.push_str(&format!(
                 "{}. **{}**\n   - {}\n",
@@ -406,7 +406,7 @@ fn build_deterministic_markdown(
                 act.description
             ));
         }
-        s.push_str("\n> 下部の **「ワンクリック適用して再最適化」** ボタンを押すと、上記パラメータを自動反映して即座に解消シミュレーションを実行できます。\n");
+        s.push_str("\n> 下部の **「処方箋を適用して再計算」** ボタンを押すと、上記パラメータを自動反映して即座に解消シミュレーションを実行できます。\n");
         sections.push(s);
     }
 

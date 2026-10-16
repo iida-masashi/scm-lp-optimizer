@@ -3,37 +3,39 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>SCM LP Optimizer — 需給計画・設備稼働・PSI・AI原因診断ダッシュボード</title>
+  <title>SCM LP Optimizer | 需給計画・設備稼働・PSI・要因診断システム</title>
   <style>
     :root {
-      --bg-main: #0f172a;
-      --bg-card: #1e293b;
-      --bg-card-hover: #26354d;
-      --bg-input: #0b1120;
-      --border: #334155;
-      --text-main: #f8fafc;
-      --text-muted: #94a3b8;
-      --accent-blue: #3b82f6;
-      --accent-indigo: #6366f1;
-      --accent-emerald: #10b981;
-      --accent-amber: #f59e0b;
-      --accent-rose: #f43f5e;
-      --accent-cyan: #06b6d4;
-      --accent-purple: #a855f7;
+      --bg-main: #f4f4f5;
+      --bg-card: #ffffff;
+      --bg-card-sub: #fafafa;
+      --bg-card-hover: #f4f4f5;
+      --bg-input: #ffffff;
+      --border: #d4d4d8;
+      --border-subtle: #e4e4e7;
+      --text-main: #18181b;
+      --text-secondary: #3f3f46;
+      --text-muted: #71717a;
+      --primary: #18181b;
+      --primary-hover: #27272a;
+      --danger: #991b1b;
+      --danger-bg: #fef2f2;
+      --danger-border: #fca5a5;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Meiryo', sans-serif;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
       background-color: var(--bg-main);
       color: var(--text-main);
       line-height: 1.5;
       min-height: 100vh;
+      font-size: 13px;
     }
     /* Top Header */
     .topbar {
-      background: linear-gradient(90deg, #0b1120 0%, #1e293b 100%);
-      border-bottom: 1px solid var(--border);
-      padding: 12px 24px;
+      background: #18181b;
+      border-bottom: 1px solid #09090b;
+      padding: 10px 24px;
       display: flex;
       flex-wrap: wrap;
       align-items: center;
@@ -42,6 +44,7 @@
       position: sticky;
       top: 0;
       z-index: 100;
+      color: #fafafa;
     }
     .brand {
       display: flex;
@@ -49,127 +52,150 @@
       gap: 12px;
     }
     .brand-badge {
-      background: linear-gradient(135deg, var(--accent-blue), var(--accent-indigo));
-      color: #fff;
-      font-weight: 700;
-      font-size: 13px;
-      padding: 6px 10px;
-      border-radius: 6px;
-      letter-spacing: 0.5px;
+      background: #fafafa;
+      color: #18181b;
+      font-weight: 800;
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 2px;
+      letter-spacing: 0.06em;
+      font-family: Consolas, Monaco, monospace;
     }
     .brand h1 {
-      font-size: 17px;
+      font-size: 15px;
       font-weight: 700;
-      color: #fff;
+      color: #fafafa;
+      letter-spacing: 0.01em;
     }
     .brand-sub {
-      font-size: 12px;
-      color: var(--text-muted);
+      font-size: 11px;
+      color: #a1a1aa;
     }
     .controls {
       display: flex;
       flex-wrap: wrap;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
     }
     select, input[type="text"], input[type="password"], textarea {
       background: var(--bg-input);
       color: var(--text-main);
       border: 1px solid var(--border);
-      border-radius: 6px;
-      padding: 7px 12px;
-      font-size: 13px;
+      border-radius: 3px;
+      padding: 6px 10px;
+      font-size: 12.5px;
       outline: none;
     }
+    .topbar select {
+      background: #27272a;
+      color: #fafafa;
+      border-color: #3f3f46;
+    }
     select:focus, input:focus, textarea:focus {
-      border-color: var(--accent-blue);
+      border-color: var(--primary);
     }
     .btn {
       cursor: pointer;
       border: 1px solid transparent;
-      border-radius: 6px;
-      padding: 7px 14px;
-      font-size: 13px;
+      border-radius: 3px;
+      padding: 6px 12px;
+      font-size: 12.5px;
       font-weight: 600;
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      transition: all 0.15s ease;
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
     }
     .btn-primary {
-      background: var(--accent-blue);
-      color: #fff;
+      background: var(--primary);
+      color: #ffffff;
+      border-color: var(--primary);
     }
-    .btn-primary:hover { background: #2563eb; }
-    .btn-emerald {
-      background: var(--accent-emerald);
-      color: #052e16;
+    .btn-primary:hover { background: var(--primary-hover); }
+    .topbar .btn-primary {
+      background: #fafafa;
+      color: #18181b;
+      border-color: #fafafa;
     }
-    .btn-emerald:hover { background: #059669; color: #fff; }
+    .topbar .btn-primary:hover {
+      background: #e4e4e7;
+    }
     .btn-outline {
-      background: transparent;
+      background: var(--bg-card);
       border-color: var(--border);
       color: var(--text-main);
     }
-    .btn-outline:hover { background: var(--bg-card-hover); border-color: var(--text-muted); }
+    .btn-outline:hover { background: var(--bg-card-hover); border-color: #a1a1aa; }
+    .topbar .btn-outline {
+      background: #27272a;
+      border-color: #3f3f46;
+      color: #fafafa;
+    }
+    .topbar .btn-outline:hover {
+      background: #3f3f46;
+    }
     .btn-sm {
-      padding: 4px 10px;
-      font-size: 12px;
+      padding: 4px 9px;
+      font-size: 11.5px;
     }
     .status-pill {
-      font-size: 12px;
-      padding: 5px 10px;
-      border-radius: 999px;
-      background: rgba(16, 185, 129, 0.15);
-      color: #34d399;
-      border: 1px solid rgba(16, 185, 129, 0.3);
+      font-size: 11.5px;
+      padding: 4px 10px;
+      border-radius: 2px;
+      background: #27272a;
+      color: #e4e4e7;
+      border: 1px solid #3f3f46;
       font-weight: 600;
+      font-family: Consolas, monospace;
     }
     /* Navigation Tabs */
     .nav-tabs {
       display: flex;
-      gap: 8px;
-      padding: 12px 24px 0;
+      gap: 4px;
+      padding: 0 24px;
       border-bottom: 1px solid var(--border);
-      background: #111827;
+      background: var(--bg-card);
     }
     .nav-tab {
-      padding: 10px 18px;
-      font-size: 14px;
+      padding: 11px 18px;
+      font-size: 13px;
       font-weight: 600;
       color: var(--text-muted);
       background: transparent;
       border: none;
-      border-bottom: 3px solid transparent;
+      border-bottom: 2px solid transparent;
       cursor: pointer;
       display: flex;
       align-items: center;
       gap: 8px;
       transition: all 0.15s;
     }
-    .nav-tab:hover { color: var(--text-main); }
+    .nav-tab:hover { color: var(--text-main); background: var(--bg-card-hover); }
     .nav-tab.active {
-      color: #60a5fa;
-      border-bottom-color: var(--accent-blue);
-      background: rgba(59, 130, 246, 0.08);
+      color: var(--text-main);
+      border-bottom-color: var(--primary);
+      font-weight: 700;
     }
     .tab-badge {
       font-size: 11px;
-      padding: 1px 7px;
-      border-radius: 99px;
-      background: #334155;
-      color: #f8fafc;
+      padding: 1px 6px;
+      border-radius: 2px;
+      background: #f4f4f5;
+      color: var(--text-secondary);
+      border: 1px solid var(--border);
+      font-variant-numeric: tabular-nums;
     }
     .tab-badge.danger {
-      background: rgba(244, 63, 94, 0.25);
-      color: #fda4af;
-      border: 1px solid rgba(244, 63, 94, 0.4);
+      background: var(--danger-bg);
+      color: var(--danger);
+      border: 1px solid var(--danger-border);
+      font-weight: 700;
     }
     /* Main Container */
     .container {
       max-width: 1600px;
       margin: 0 auto;
-      padding: 20px 24px 48px;
+      padding: 18px 24px 48px;
     }
     .screen { display: none; }
     .screen.active { display: block; }
@@ -177,28 +203,41 @@
     .kpi-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-      gap: 14px;
-      margin-bottom: 20px;
+      gap: 12px;
+      margin-bottom: 18px;
     }
     .kpi-card {
       background: var(--bg-card);
       border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 14px 16px;
+      border-top: 3px solid #27272a;
+      border-radius: 3px;
+      padding: 12px 15px;
+    }
+    .kpi-card.alert-critical {
+      border-color: var(--danger-border);
+      border-top: 3px solid var(--danger);
+      background: var(--danger-bg);
     }
     .kpi-label {
-      font-size: 12px;
+      font-size: 11px;
       color: var(--text-muted);
-      font-weight: 600;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
       margin-bottom: 4px;
     }
+    .kpi-card.alert-critical .kpi-label {
+      color: var(--danger);
+    }
     .kpi-val {
-      font-size: 24px;
+      font-size: 22px;
       font-weight: 700;
-      letter-spacing: -0.5px;
+      letter-spacing: -0.3px;
+      color: var(--text-main);
+      font-variant-numeric: tabular-nums;
     }
     .kpi-sub {
-      font-size: 12px;
+      font-size: 11.5px;
       color: var(--text-muted);
       margin-top: 4px;
     }
@@ -206,15 +245,15 @@
     .grid-2 {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(640px, 1fr));
-      gap: 18px;
-      margin-bottom: 18px;
+      gap: 16px;
+      margin-bottom: 16px;
     }
     .card {
       background: var(--bg-card);
       border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 18px;
-      margin-bottom: 18px;
+      border-radius: 3px;
+      padding: 16px 18px;
+      margin-bottom: 16px;
     }
     .card-header {
       display: flex;
@@ -222,13 +261,14 @@
       align-items: center;
       justify-content: space-between;
       gap: 10px;
-      margin-bottom: 14px;
+      margin-bottom: 12px;
       padding-bottom: 10px;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+      border-bottom: 1px solid var(--border-subtle);
     }
     .card-title {
-      font-size: 15px;
+      font-size: 14px;
       font-weight: 700;
+      color: var(--text-main);
       display: flex;
       align-items: center;
       gap: 8px;
@@ -236,55 +276,61 @@
     .card-desc {
       font-size: 12px;
       color: var(--text-muted);
+      margin-top: 2px;
     }
     /* Tables */
     .table-wrap {
       overflow-x: auto;
-      border-radius: 8px;
-      border: 1px solid var(--border);
+      border-radius: 2px;
+      border: 1px solid var(--border-subtle);
     }
     table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 13px;
-      background: #131c2e;
+      font-size: 12.5px;
+      background: var(--bg-card);
+      font-variant-numeric: tabular-nums;
     }
     th, td {
-      padding: 8px 12px;
-      border-bottom: 1px solid #26334d;
+      padding: 7px 11px;
+      border-bottom: 1px solid var(--border-subtle);
       text-align: right;
       white-space: nowrap;
     }
     th {
-      background: #1e293b;
-      color: #cbd5e1;
-      font-weight: 600;
-      font-size: 12px;
+      background: #f4f4f5;
+      color: var(--text-secondary);
+      font-weight: 700;
+      font-size: 11.5px;
+      border-bottom: 1px solid var(--border);
       position: sticky;
       top: 0;
     }
     th.left, td.left { text-align: left; }
     th.center, td.center { text-align: center; }
-    tr:hover td { background: rgba(59, 130, 246, 0.06); }
-    /* Badges & Heatmap Cells */
+    tr:hover td { background: var(--bg-card-hover); }
+    tr.row-critical td { background: var(--danger-bg); }
+    tr.row-critical:hover td { background: #fee2e2; }
+    /* Badges & Bars */
     .badge {
       display: inline-block;
-      padding: 2px 8px;
-      border-radius: 99px;
+      padding: 2px 7px;
+      border-radius: 2px;
       font-size: 11px;
       font-weight: 600;
+      border: 1px solid transparent;
     }
-    .badge-red { background: rgba(244, 63, 94, 0.2); color: #fda4af; border: 1px solid rgba(244, 63, 94, 0.4); }
-    .badge-amber { background: rgba(245, 158, 11, 0.2); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.4); }
-    .badge-green { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.4); }
-    .badge-blue { background: rgba(59, 130, 246, 0.2); color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.4); }
-    .badge-purple { background: rgba(168, 85, 247, 0.2); color: #d8b4fe; border: 1px solid rgba(168, 85, 247, 0.4); }
+    .badge-red { background: var(--danger-bg); color: var(--danger); border-color: var(--danger-border); font-weight: 700; }
+    .badge-amber { background: #27272a; color: #ffffff; border-color: #18181b; }
+    .badge-green { background: #f4f4f5; color: #52525b; border-color: #d4d4d8; }
+    .badge-blue { background: #f4f4f5; color: #18181b; border-color: #a1a1aa; }
+    .badge-purple { background: #f4f4f5; color: #3f3f46; border-color: #d4d4d8; }
 
     .util-bar-bg {
-      width: 110px;
-      height: 8px;
-      background: #0f172a;
-      border-radius: 4px;
+      width: 100px;
+      height: 7px;
+      background: #e4e4e7;
+      border-radius: 2px;
       overflow: hidden;
       display: inline-block;
       vertical-align: middle;
@@ -292,90 +338,102 @@
     }
     .util-bar-fill {
       height: 100%;
-      border-radius: 4px;
     }
     /* PSI Row Highlights */
-    .psi-row-inv td { background: rgba(59, 130, 246, 0.08); font-weight: 700; }
-    .psi-row-shortage td { background: rgba(244, 63, 94, 0.12); color: #fda4af; font-weight: 700; }
-    .psi-row-ss td { color: #fcd34d; }
-    .val-zero { color: #475569; }
-    .val-pos-supply { color: #34d399; font-weight: 600; }
-    .val-neg-demand { color: #fb923c; }
-    .val-danger { color: #fb7185; font-weight: 700; }
+    .psi-row-inv td { background: #f4f4f5; font-weight: 700; color: var(--text-main); }
+    .psi-row-shortage td { background: var(--danger-bg); color: var(--danger); font-weight: 700; }
+    .psi-row-ss td { color: var(--text-secondary); }
+    .val-zero { color: #a1a1aa; }
+    .val-pos-supply { color: #18181b; font-weight: 600; }
+    .val-neg-demand { color: #52525b; }
+    .val-danger { color: var(--danger); font-weight: 700; }
 
     /* Q&A Screen */
     .chip-list {
       display: flex;
       flex-wrap: wrap;
-      gap: 8px;
+      gap: 6px;
       margin-bottom: 14px;
     }
     .chip {
-      background: rgba(59, 130, 246, 0.12);
-      border: 1px solid rgba(59, 130, 246, 0.35);
-      color: #93c5fd;
-      padding: 6px 12px;
-      border-radius: 999px;
+      background: var(--bg-card-sub);
+      border: 1px solid var(--border);
+      color: var(--text-main);
+      padding: 5px 11px;
+      border-radius: 2px;
       font-size: 12px;
+      font-weight: 500;
       cursor: pointer;
       transition: all 0.15s;
     }
     .chip:hover {
-      background: rgba(59, 130, 246, 0.25);
-      color: #fff;
+      background: #e4e4e7;
+      border-color: var(--primary);
     }
     .qa-box {
       display: flex;
-      gap: 10px;
-      margin-bottom: 16px;
+      gap: 8px;
+      margin-bottom: 14px;
     }
     .qa-box input {
       flex: 1;
-      padding: 10px 14px;
-      font-size: 14px;
+      padding: 8px 12px;
+      font-size: 13px;
     }
     .causal-chain {
       display: flex;
       flex-direction: column;
-      gap: 10px;
-      margin: 12px 0;
+      gap: 8px;
+      margin: 10px 0;
     }
     .causal-step {
-      background: #131c2e;
-      border-left: 4px solid var(--accent-blue);
-      border-radius: 6px;
-      padding: 10px 14px;
-      font-size: 13px;
+      background: var(--bg-card-sub);
+      border: 1px solid var(--border-subtle);
+      border-left: 3px solid #52525b;
+      border-radius: 2px;
+      padding: 9px 12px;
+      font-size: 12.5px;
     }
-    .causal-step.crit { border-left-color: var(--accent-rose); }
-    .causal-step.warn { border-left-color: var(--accent-amber); }
+    .causal-step.crit { border-left-color: var(--danger); background: var(--danger-bg); }
+    .causal-step.warn { border-left-color: #18181b; }
     .md-output {
-      background: #0b1120;
+      background: var(--bg-card-sub);
       border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 18px 22px;
-      font-size: 14px;
-      line-height: 1.7;
+      border-radius: 3px;
+      padding: 16px 20px;
+      font-size: 13px;
+      line-height: 1.65;
+      color: var(--text-main);
     }
-    .md-output h3 { color: #93c5fd; margin: 14px 0 8px; font-size: 16px; }
+    .md-output h3 {
+      color: var(--text-main);
+      margin: 14px 0 8px;
+      font-size: 14.5px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 4px;
+    }
     .md-output h3:first-child { margin-top: 0; }
-    .md-output h4 { color: #fde68a; margin: 12px 0 6px; font-size: 14px; }
+    .md-output h4 { color: var(--text-secondary); margin: 12px 0 6px; font-size: 13px; }
     .md-output ul { padding-left: 20px; margin: 6px 0; }
-    .md-output hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+    .md-output hr { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
     .md-output code {
-      background: #1e293b;
-      padding: 2px 6px;
-      border-radius: 4px;
+      background: #e4e4e7;
+      padding: 1px 5px;
+      border-radius: 2px;
+      font-family: Consolas, monospace;
+      font-size: 11.5px;
+      color: #18181b;
+    }
+    code {
       font-family: Consolas, monospace;
       font-size: 12px;
-      color: #e2e8f0;
     }
-    /* Modal / Drawer for JSON Editor */
+    /* Drawer for JSON Editor */
     .json-drawer {
       display: none;
-      background: #0b1120;
+      background: #fafafa;
       border-bottom: 1px solid var(--border);
-      padding: 16px 24px;
+      padding: 14px 24px;
     }
     .json-drawer.open { display: block; }
   </style>
@@ -385,35 +443,35 @@
   <!-- Top Bar -->
   <header class="topbar">
     <div class="brand">
-      <span class="brand-badge">Clarabel LP</span>
+      <span class="brand-badge">SCM-LP</span>
       <div>
-        <h1>SCM LP Optimizer 可視化＆AI原因診断コンソール</h1>
-        <div class="brand-sub">工場ライン週別稼働率・拠点間輸送・発注・欠品・SKU別PSI明細・自然言語Q&A</div>
+        <h1>SCM LP Optimizer 需給計画・稼働率・要因診断コンソール</h1>
+        <div class="brand-sub">工場ライン週別稼働率 / 拠点間輸送 / 発注計画 / 欠品監視 / SKU別PSI明細 / 自然言語Q&amp;A</div>
       </div>
     </div>
     <div class="controls">
-      <label style="font-size:12px; color:var(--text-muted);">シナリオ選択:</label>
+      <label style="font-size:11.5px; color:#a1a1aa; font-weight:600;">シナリオ選択:</label>
       <select id="scenarioSelect" onchange="loadSelectedScenario()">
-        <option value="shortage_bottleneck">🔥 シナリオ1: 需要急増・ライン能力上限＆欠品発生ケース (原因診断デモ)</option>
-        <option value="basic_2echelon">✅ シナリオ2: 標準2階層ネットワーク (PLANT-A ➔ DC-EAST / 欠品ゼロ)</option>
-        <option value="multi_plant_quota">🌐 シナリオ3: 2工場・2DC クォータ配分＆多段階BOMケース</option>
+        <option value="shortage_bottleneck">シナリオ1: 需要急増・ライン能力上限＆欠品発生ケース (要因診断デモ)</option>
+        <option value="basic_2echelon">シナリオ2: 標準2階層ネットワーク (PLANT-A ➔ DC-EAST / 欠品ゼロ)</option>
+        <option value="multi_plant_quota">シナリオ3: 2工場・2DC クォータ配分＆多段階BOMケース</option>
       </select>
-      <button class="btn btn-outline" onclick="toggleJsonDrawer()">📝 入力JSON編集 / アップロード</button>
-      <button class="btn btn-primary" onclick="runOptimization()">⚡ 最適化を実行</button>
-      <span id="solverStatusPill" class="status-pill">待機中</span>
+      <button class="btn btn-outline" onclick="toggleJsonDrawer()">入力JSON編集 / 読込</button>
+      <button class="btn btn-primary" onclick="runOptimization()">最適化を実行</button>
+      <span id="solverStatusPill" class="status-pill">READY</span>
     </div>
   </header>
 
   <!-- Collapsible JSON Input Editor / File Uploader -->
   <div id="jsonDrawer" class="json-drawer">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-      <div style="font-size:13px; font-weight:600;">
-        入力ペイロード (`OptimizeRequestPayload` JSON) — 直接編集して「⚡ 最適化を実行」を押すとリアルタイムに再計算されます
+      <div style="font-size:12.5px; font-weight:700; color:var(--text-main);">
+        入力ペイロード (OptimizeRequestPayload JSON) — 直接編集して「最適化を実行」を押すと再計算されます
       </div>
       <div style="display:flex; gap:8px;">
         <input type="file" id="jsonFileInput" accept=".json" style="font-size:12px;" onchange="uploadJsonFile(event)" />
-        <button class="btn btn-sm btn-outline" onclick="downloadCurrentJson()">💾 JSON保存</button>
-        <button class="btn btn-sm btn-outline" onclick="toggleJsonDrawer()">✖ 閉じる</button>
+        <button class="btn btn-sm btn-outline" onclick="downloadCurrentJson()">JSON保存</button>
+        <button class="btn btn-sm btn-outline" onclick="toggleJsonDrawer()">閉じる</button>
       </div>
     </div>
     <textarea id="requestJsonArea" rows="12" style="width:100%; font-family:Consolas, monospace; font-size:12px;"></textarea>
@@ -422,16 +480,16 @@
   <!-- 3 Screen Navigation Tabs -->
   <nav class="nav-tabs">
     <button class="nav-tab active" id="tabBtn-summary" onclick="switchTab('summary')">
-      🏭 画面1: 全体サマリ（ライン稼働率・拠点間輸送・発注・欠品）
+      1. 全体サマリ（ライン稼働率・拠点間輸送・発注・欠品）
       <span id="badgeShortageCount" class="tab-badge">0</span>
     </button>
     <button class="nav-tab" id="tabBtn-psi" onclick="switchTab('psi')">
-      📊 画面2: SKUレベル PSI 明細・在庫推移
+      2. SKUレベル PSI 明細・在庫推移
       <span id="badgeSkuCount" class="tab-badge">0 SKU</span>
     </button>
     <button class="nav-tab" id="tabBtn-qa" onclick="switchTab('qa')">
-      💬 画面3: AI 自然言語 Q&A・欠品原因診断 (Root-Cause & What-If)
-      <span id="badgeDiagCount" class="tab-badge danger">診断</span>
+      3. 自然言語 Q&amp;A・欠品要因診断 (Root-Cause &amp; What-If)
+      <span id="badgeDiagCount" class="tab-badge">診断</span>
     </button>
   </nav>
 
@@ -449,18 +507,18 @@
       <div class="card">
         <div class="card-header">
           <div>
-            <div class="card-title">① 生産工場のラインごとの週別稼働率（Capacity Utilization & Shadow Price）</div>
+            <div class="card-title">1. 生産工場・製造ライン別の週次稼働率（Capacity Utilization &amp; Shadow Price）</div>
             <div class="card-desc">
-              各工場の製造ラインにおける週別の稼働率（%）、使用時間/稼働可能時間（h）、生産数量/上限数量、および能力制約の双対変数（Shadow Price: 能力1単位増強あたりのコスト改善価値）を表示します。
+              各工場の製造ラインにおける週別の稼働率（%）、使用時間/稼働可能時間（h）、生産数量/上限数量、および能力制約の潜在価格（Shadow Price）を表示します。
             </div>
           </div>
           <div style="display:flex; gap:8px; align-items:center;">
-            <span class="badge badge-green">0〜79%: 余裕あり</span>
+            <span class="badge badge-green">0〜79%: 適正</span>
             <span class="badge badge-amber">80〜99%: 高負荷</span>
-            <span class="badge badge-red">100%: ボトルネック律速</span>
+            <span class="badge badge-red">100%: ボトルネック上限</span>
           </div>
         </div>
-        <div id="lineUtilChartContainer" style="margin-bottom:16px;"></div>
+        <div id="lineUtilChartContainer" style="margin-bottom:14px;"></div>
         <div class="table-wrap" id="lineUtilTableContainer"></div>
       </div>
 
@@ -470,7 +528,7 @@
         <div class="card" style="margin-bottom:0;">
           <div class="card-header">
             <div>
-              <div class="card-title">② 拠点間の輸送量（Inter-Location Transport Flows）</div>
+              <div class="card-title">2. 拠点間の輸送量（Inter-Location Transport Flows）</div>
               <div class="card-desc">発拠点（From）➔ 着拠点（To）× 品目（SKU）ごとの週別輸送数量と輸送リードタイム</div>
             </div>
             <div>
@@ -480,7 +538,7 @@
               </select>
             </div>
           </div>
-          <div id="transportChartContainer" style="margin-bottom:14px;"></div>
+          <div id="transportChartContainer" style="margin-bottom:12px;"></div>
           <div class="table-wrap" id="transportTableContainer"></div>
         </div>
 
@@ -488,22 +546,22 @@
         <div class="card" style="margin-bottom:0;">
           <div class="card-header">
             <div>
-              <div class="card-title">③ サプライヤー発注量・調達入荷量（Order Release & Procurement）</div>
-              <div class="card-desc">外部調達品目（原材料・購買品）の週別発注リリース量（`order_release_qty`）と入荷予定</div>
+              <div class="card-title">3. サプライヤー発注量・調達入荷量（Order Release &amp; Procurement）</div>
+              <div class="card-desc">外部調達品目（原材料・購買品）の週別発注リリース量（order_release_qty）と入荷予定</div>
             </div>
           </div>
-          <div id="procurementChartContainer" style="margin-bottom:14px;"></div>
+          <div id="procurementChartContainer" style="margin-bottom:12px;"></div>
           <div class="table-wrap" id="procurementTableContainer"></div>
         </div>
       </div>
 
       <!-- Row 3: Shortage & Bottleneck Alert Table -->
-      <div class="card" style="margin-top:18px;">
+      <div class="card" style="margin-top:16px;">
         <div class="card-header">
           <div>
-            <div class="card-title">④ 欠品量（Shortage）・安全在庫割れ ＆ ボトルネック原因一覧</div>
+            <div class="card-title">4. 欠品量（Shortage）・安全在庫割れ ＆ ボトルネック原因一覧</div>
             <div class="card-desc">
-              需要に対して供給が不足した拠点・SKU・週の一覧と上流主因です。「SKU明細」または「なぜ欠品？AI診断」へワンクリックで遷移できます。
+              需要に対して供給が不足した拠点・SKU・週の一覧と上流主因です。「SKU明細」または「要因診断」へ直接遷移できます。
             </div>
           </div>
         </div>
@@ -516,21 +574,21 @@
          ===================================================================== -->
     <section id="screen-psi" class="screen">
       <div class="card">
-        <div class="card-header">
+        <div class="card-header" style="margin-bottom:0; padding-bottom:0; border-bottom:none;">
           <div>
-            <div class="card-title">🔍 SKUレベル 週次 PSI（Production / Supply / Inventory）明細フィルタ</div>
-            <div class="card-desc">拠点・品目（SKU）・ステータスで絞り込み、期首在庫から入庫・需要・出荷・期末在庫・安全在庫・欠品までの完全な物質収支を確認します。</div>
+            <div class="card-title">SKUレベル 週次 PSI（Production / Supply / Inventory）明細フィルタ</div>
+            <div class="card-desc">拠点・品目（SKU）・ステータスで絞り込み、期首在庫から入庫・需要・出荷・期末在庫・安全在庫・欠品までの物質収支を確認します。</div>
           </div>
           <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
-            <label style="font-size:12px;">拠点:</label>
+            <label style="font-size:12px; font-weight:600; color:var(--text-secondary);">拠点:</label>
             <select id="psiFilterLoc" onchange="renderPsiScreen()"></select>
-            <label style="font-size:12px;">品目 (SKU):</label>
+            <label style="font-size:12px; font-weight:600; color:var(--text-secondary);">品目 (SKU):</label>
             <select id="psiFilterSku" onchange="renderPsiScreen()"></select>
-            <label style="font-size:12px;">状態フィルタ:</label>
+            <label style="font-size:12px; font-weight:600; color:var(--text-secondary);">状態フィルタ:</label>
             <select id="psiFilterStatus" onchange="renderPsiScreen()">
               <option value="all">すべて表示</option>
-              <option value="shortage">🚨 欠品発生 (Shortage > 0) のみ</option>
-              <option value="ss_deficit">⚠️ 安全在庫割れ (SS Deficit > 0) のみ</option>
+              <option value="shortage">欠品発生 (Shortage &gt; 0) のみ</option>
+              <option value="ss_deficit">安全在庫割れ (SS Deficit &gt; 0) のみ</option>
             </select>
           </div>
         </div>
@@ -546,39 +604,39 @@
       <div class="card">
         <div class="card-header">
           <div>
-            <div class="card-title">💬 AI 自然言語問い合わせ ＆ 決定論的・欠品原因診断（Root-Cause Tracer）</div>
+            <div class="card-title">自然言語問い合わせ ＆ 決定論的・欠品要因診断（Root-Cause Tracer）</div>
             <div class="card-desc">
-              「なぜ欠品が発生するのか？」「どのラインがボトルネックか？」「どうすれば欠品を解消できるか？」などを自然言語で質問できます。<br/>
-              Rust エンジンが下流の欠品から上流の輸送LT・製造ライン能力・BOM原材料・ロット制約までを逆探索し、ファクト数値と解消シミュレーション（What-If 処方箋）を提示します。
+              「なぜ欠品が発生するのか？」「どのラインがボトルネックか？」「どうすれば欠品を解消できるか？」などを自然言語で問い合わせできます。<br/>
+              ソルバーが下流の欠品から上流の輸送LT・製造ライン能力・BOM原材料・ロット制約までを逆探索し、ファクト数値と解消シミュレーション（What-If 処方箋）を提示します。
             </div>
           </div>
           <div style="display:flex; align-items:center; gap:8px;">
-            <input type="password" id="geminiApiKeyInput" placeholder="Gemini API Key (任意・未入力でもローカル推論で即答)" style="width:310px; font-size:12px;" />
+            <input type="password" id="geminiApiKeyInput" placeholder="Gemini API Key (任意・未入力時は内蔵エンジンで即答)" style="width:310px; font-size:12px;" />
           </div>
         </div>
 
         <!-- Quick Question Chips -->
-        <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">💡 ワンクリック質問サンプル:</div>
+        <div style="font-size:11.5px; color:var(--text-muted); font-weight:600; margin-bottom:6px;">定型質問テンプレート:</div>
         <div class="chip-list">
-          <span class="chip" onclick="askPreset('なぜ欠品が発生するのか？上流のボトルネックやリードタイムも含めて原因を教えて')">🚨 なぜ欠品が発生するのか？原因を教えて</span>
-          <span class="chip" onclick="askPreset('どの生産工場・製造ラインがボトルネック（稼働率上限）になっているか？')">🏭 どの製造ラインがボトルネックになっているか？</span>
-          <span class="chip" onclick="askPreset('欠品を解消するにはどうすればいいか？具体的な対策と必要能力を教えて')">💡 欠品を解消するための対策（What-If）を教えて</span>
-          <span class="chip" onclick="askPreset('拠点間の輸送量とサプライヤーへの発注量のスケジュールを教えて')">🚚 拠点間輸送量と発注量のスケジュールは？</span>
-          <span class="chip" onclick="askPreset('FG-1 と RAW-1 のSKU別の在庫推移とPSI明細を教えて')">📊 FG-1 と RAW-1 のPSI明細を教えて</span>
+          <span class="chip" onclick="askPreset('なぜ欠品が発生するのか？上流のボトルネックやリードタイムも含めて原因を教えて')">[欠品要因] なぜ欠品が発生するのか？原因を教えて</span>
+          <span class="chip" onclick="askPreset('どの生産工場・製造ラインがボトルネック（稼働率上限）になっているか？')">[設備稼働] どの製造ラインがボトルネックになっているか？</span>
+          <span class="chip" onclick="askPreset('欠品を解消するにはどうすればいいか？具体的な対策と必要能力を教えて')">[対策立案] 欠品を解消するための対策（What-If）を教えて</span>
+          <span class="chip" onclick="askPreset('拠点間の輸送量とサプライヤーへの発注量のスケジュールを教えて')">[輸送・発注] 拠点間輸送量と発注量のスケジュールは？</span>
+          <span class="chip" onclick="askPreset('FG-1 と RAW-1 のSKU別の在庫推移とPSI明細を教えて')">[PSI確認] FG-1 と RAW-1 のPSI明細を教えて</span>
         </div>
 
         <!-- Input Bar -->
         <div class="qa-box">
           <input type="text" id="qaQuestionInput" placeholder="例: なぜ DC-EAST の FG-1 で欠品が発生するのか？どのラインを増強すべきか？" onkeydown="if(event.key==='Enter') submitQuestion();" />
-          <button class="btn btn-primary" onclick="submitQuestion()">🔍 質問・原因診断を実行</button>
+          <button class="btn btn-primary" onclick="submitQuestion()">質問・要因診断を実行</button>
         </div>
 
         <!-- What-If One-Click Prescriptions -->
-        <div id="qaWhatIfContainer" style="margin-bottom:16px;"></div>
+        <div id="qaWhatIfContainer" style="margin-bottom:14px;"></div>
 
         <!-- Answer Markdown Output -->
         <div id="qaAnswerContainer" class="md-output">
-          上の質問ボタンをクリックするか、自由な自然言語で質問を入力してください。
+          上の定型質問ボタンをクリックするか、自然言語で質問を入力してください。
         </div>
       </div>
 
@@ -586,7 +644,7 @@
       <div class="card">
         <div class="card-header">
           <div>
-            <div class="card-title">🔗 検出された欠品・安全在庫割れの因果トレースツリー（Upstream Root-Cause Chains）</div>
+            <div class="card-title">検出された欠品・安全在庫割れの因果トレース一覧（Upstream Root-Cause Chains）</div>
             <div class="card-desc">ソルバーが自動検出した各課題の「発生箇所 ➔ 輸送ルート ➔ 工場ライン能力 ➔ 原材料調達」の因果ステップ一覧</div>
           </div>
         </div>
@@ -657,12 +715,12 @@
 
     async function runOptimization() {
       const pill = document.getElementById('solverStatusPill');
-      pill.textContent = '計算中...';
+      pill.textContent = 'SOLVING...';
       try {
         currentRequest = JSON.parse(document.getElementById('requestJsonArea').value);
       } catch (err) {
         alert('入力JSONの構文エラー: ' + err.message);
-        pill.textContent = 'JSONエラー';
+        pill.textContent = 'JSON ERROR';
         return;
       }
 
@@ -674,15 +732,15 @@
         });
         const data = await res.json();
         if (!res.ok || data.status === 'error') {
-          pill.textContent = 'エラー';
+          pill.textContent = 'ERROR';
           alert('最適化エラー: ' + (data.error_msg || JSON.stringify(data)));
           return;
         }
         currentResponse = data;
-        pill.textContent = `Optimal (${data.elapsed_ms} ms)`;
+        pill.textContent = `OPTIMAL (${data.elapsed_ms} ms)`;
         renderAllScreens();
       } catch (err) {
-        pill.textContent = '通信エラー';
+        pill.textContent = 'NET ERROR';
         console.error(err);
       }
     }
@@ -699,7 +757,9 @@
       sb.className = 'tab-badge' + (totalShortage > 0 ? ' danger' : '');
 
       document.getElementById('badgeSkuCount').textContent = `${uniqueSkus} 拠点×SKU`;
-      document.getElementById('badgeDiagCount').textContent = `${diagCount} 件の診断`;
+      const db = document.getElementById('badgeDiagCount');
+      db.textContent = `${diagCount} 件`;
+      db.className = 'tab-badge' + (totalShortage > 0 ? ' danger' : '');
 
       renderSummaryScreen();
       populatePsiFilters();
@@ -728,35 +788,38 @@
       const totalOrderRelease = psi.reduce((s, r) => s + r.order_release_qty, 0);
       const totalProd = psi.reduce((s, r) => s + r.production_qty, 0);
 
+      const hasShortage = totalShortage > 0;
+      const hasMaxUtil = maxUtil >= 99.5;
+
       document.getElementById('summaryKpiGrid').innerHTML = `
         <div class="kpi-card">
           <div class="kpi-label">顧客販売需要 / 充足率 (Fill Rate)</div>
-          <div class="kpi-val" style="color:${fillRate < 99.9 ? '#fda4af' : '#34d399'};">${fillRate.toFixed(1)}%</div>
+          <div class="kpi-val" style="color:${fillRate < 99.9 ? 'var(--danger)' : 'var(--text-main)'};">${fillRate.toFixed(1)}%</div>
           <div class="kpi-sub">総需要: ${totalDemand.toLocaleString()} 個 / 充足: ${(totalDemand - totalShortage).toLocaleString()} 個</div>
         </div>
-        <div class="kpi-card">
+        <div class="kpi-card ${hasShortage ? 'alert-critical' : ''}">
           <div class="kpi-label">総欠品量 (Shortage Qty)</div>
-          <div class="kpi-val" style="color:${totalShortage > 0 ? '#f43f5e' : '#34d399'};">${totalShortage.toLocaleString()} 個</div>
+          <div class="kpi-val" style="color:${hasShortage ? 'var(--danger)' : 'var(--text-main)'};">${totalShortage.toLocaleString()} 個</div>
           <div class="kpi-sub">安全在庫目標割れ合計: ${totalSsDef.toLocaleString()} 個</div>
         </div>
-        <div class="kpi-card">
+        <div class="kpi-card ${hasMaxUtil ? 'alert-critical' : ''}">
           <div class="kpi-label">工場ライン最大 / 平均稼働率</div>
-          <div class="kpi-val" style="color:${maxUtil >= 99.5 ? '#f59e0b' : '#60a5fa'};">${maxUtil.toFixed(1)}% <span style="font-size:14px; font-weight:500; color:var(--text-muted);">/ 平均 ${avgUtil.toFixed(1)}%</span></div>
+          <div class="kpi-val" style="color:${hasMaxUtil ? 'var(--danger)' : 'var(--text-main)'};">${maxUtil.toFixed(1)}% <span style="font-size:13px; font-weight:500; color:var(--text-muted);">/ 平均 ${avgUtil.toFixed(1)}%</span></div>
           <div class="kpi-sub">総生産入庫量: ${totalProd.toLocaleString()} 個</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-label">拠点間 総輸送量 (Transport)</div>
-          <div class="kpi-val" style="color:#38bdf8;">${totalTransport.toLocaleString()} 個</div>
+          <div class="kpi-val">${totalTransport.toLocaleString()} 個</div>
           <div class="kpi-sub">対象輸送ルート数: ${new Set(flows.map(f => f.from_location + '->' + f.to_location + ':' + f.sku)).size} ルート</div>
         </div>
         <div class="kpi-card">
           <div class="kpi-label">外部サプライヤー 総発注量</div>
-          <div class="kpi-val" style="color:#a855f7;">${totalOrderRelease.toLocaleString()} 個</div>
-          <div class="kpi-sub">調達リリース (` + '`order_release_qty`' + `) 合計</div>
+          <div class="kpi-val">${totalOrderRelease.toLocaleString()} 個</div>
+          <div class="kpi-sub">調達リリース (order_release_qty) 合計</div>
         </div>
-        <div class="kpi-card">
+        <div class="kpi-card ${bottlenecks.length > 0 ? 'alert-critical' : ''}">
           <div class="kpi-label">能力ボトルネック週数 (Shadow Price)</div>
-          <div class="kpi-val" style="color:${bottlenecks.length > 0 ? '#fb7185' : '#94a3b8'};">${bottlenecks.length} 箇所</div>
+          <div class="kpi-val" style="color:${bottlenecks.length > 0 ? 'var(--danger)' : 'var(--text-main)'};">${bottlenecks.length} 箇所</div>
           <div class="kpi-sub">${bottlenecks.length > 0 ? '最大限界価値: ' + Math.max(...bottlenecks.map(b => Math.abs(b.marginal_value))).toFixed(1) : '能力上限の超過圧なし'}</div>
         </div>
       `;
@@ -773,48 +836,47 @@
       const tableEl = document.getElementById('lineUtilTableContainer');
 
       if (lineUtils.length === 0) {
-        chartEl.innerHTML = '<div style="color:var(--text-muted); font-size:13px;">製造ライン定義がありません。</div>';
+        chartEl.innerHTML = '<div style="color:var(--text-muted); font-size:12.5px;">製造ライン定義がありません。</div>';
         tableEl.innerHTML = '';
         return;
       }
 
       // Group by (location, line_id)
       const groups = {};
-      const weeksSet = new Set();
       lineUtils.forEach(r => {
         const key = `${r.location} / ${r.line_id}`;
         if (!groups[key]) groups[key] = [];
         groups[key].push(r);
-        weeksSet.add(r.week_start);
       });
-      const weeks = Array.from(weeksSet);
 
-      // Visual Bar Cards per Line
-      let chartHtml = '<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(420px, 1fr)); gap:14px;">';
+      // Visual Bar Cards per Line (Monotone + Dark Red for 100% bottleneck)
+      let chartHtml = '<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(420px, 1fr)); gap:12px;">';
       Object.entries(groups).forEach(([lineKey, rows]) => {
-        chartHtml += `<div style="background:#131c2e; border:1px solid var(--border); border-radius:8px; padding:14px;">
-          <div style="font-weight:700; font-size:13px; margin-bottom:10px; display:flex; justify-content:space-between;">
-            <span>🏭 ${lineKey}</span>
-            <span style="color:var(--text-muted); font-size:12px;">基準: ${rows[0].capacity_mode === 'hours' ? '稼働時間 (h)' : '数量 (個)'}</span>
+        chartHtml += `<div style="background:var(--bg-card-sub); border:1px solid var(--border); border-radius:3px; padding:12px 14px;">
+          <div style="font-weight:700; font-size:12.5px; margin-bottom:10px; display:flex; justify-content:space-between;">
+            <span>ライン: ${lineKey}</span>
+            <span style="color:var(--text-muted); font-size:11.5px; font-weight:500;">基準: ${rows[0].capacity_mode === 'hours' ? '稼働時間 (h)' : '数量 (個)'}</span>
           </div>
-          <div style="display:flex; align-items:flex-end; gap:14px; height:135px; padding-top:18px; border-bottom:1px solid #334155;">`;
+          <div style="display:flex; align-items:flex-end; gap:14px; height:125px; padding-top:18px; border-bottom:1px solid var(--border);">`;
         rows.forEach(r => {
           const pct = Math.min(100, r.utilization_pct);
-          const color = r.is_bottleneck || r.utilization_pct >= 99.5 ? '#f43f5e' : (r.utilization_pct >= 80 ? '#f59e0b' : '#10b981');
+          const isCrit = r.is_bottleneck || r.utilization_pct >= 99.5;
+          const barColor = isCrit ? '#991b1b' : (r.utilization_pct >= 80 ? '#27272a' : '#71717a');
+          const textColor = isCrit ? '#991b1b' : '#18181b';
           const subText = r.capacity_mode === 'hours'
             ? `${r.used_hours}h / ${r.available_hours}h`
             : `${r.used_quantity} / ${r.max_capacity_quantity}`;
           chartHtml += `
             <div style="flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end;">
-              <div style="font-size:11px; font-weight:700; color:${color}; margin-bottom:3px;">${r.utilization_pct.toFixed(1)}%</div>
-              <div style="width:100%; max-width:56px; height:${Math.max(4, pct)}%; background:${color}; border-radius:4px 4px 0 0; position:relative;" title="${subText} (生産: ${r.used_quantity}個)"></div>
+              <div style="font-size:11px; font-weight:700; color:${textColor}; margin-bottom:3px;">${r.utilization_pct.toFixed(1)}%</div>
+              <div style="width:100%; max-width:52px; height:${Math.max(4, pct)}%; background:${barColor}; border-radius:2px 2px 0 0; position:relative;" title="${subText} (生産: ${r.used_quantity}個)"></div>
             </div>`;
         });
         chartHtml += `</div><div style="display:flex; gap:14px; margin-top:6px;">`;
         rows.forEach(r => {
           chartHtml += `<div style="flex:1; text-align:center; font-size:11px; color:var(--text-muted);">
-            <div>${r.week_start.slice(5)}</div>
-            <div style="font-size:10px;">${r.used_quantity}個</div>
+            <div style="font-weight:600; color:var(--text-secondary);">${r.week_start.slice(5)}</div>
+            <div style="font-size:10.5px;">${r.used_quantity}個</div>
           </div>`;
         });
         chartHtml += `</div></div>`;
@@ -839,26 +901,28 @@
         </thead>
         <tbody>`;
       lineUtils.forEach(r => {
-        const color = r.is_bottleneck || r.utilization_pct >= 99.5 ? '#f43f5e' : (r.utilization_pct >= 80 ? '#f59e0b' : '#10b981');
-        const badge = r.is_bottleneck || r.utilization_pct >= 99.5
-          ? '<span class="badge badge-red">🔴 ボトルネック上限</span>'
-          : (r.utilization_pct >= 80 ? '<span class="badge badge-amber">🟡 高負荷</span>' : '<span class="badge badge-green">🟢 適正</span>');
+        const isCrit = r.is_bottleneck || r.utilization_pct >= 99.5;
+        const barColor = isCrit ? '#991b1b' : (r.utilization_pct >= 80 ? '#27272a' : '#71717a');
+        const textColor = isCrit ? '#991b1b' : '#18181b';
+        const badge = isCrit
+          ? '<span class="badge badge-red">ボトルネック上限</span>'
+          : (r.utilization_pct >= 80 ? '<span class="badge badge-amber">高負荷</span>' : '<span class="badge badge-green">適正</span>');
         const breakdownStr = (r.sku_breakdown || [])
           .map(b => `<span class="badge badge-blue" style="cursor:pointer; margin-right:4px;" onclick="jumpToSkuPsi('${r.location}','${b.sku}')">${b.sku}: ${b.production_qty}個 (${b.used_hours}h)</span>`)
           .join('');
-        tbl += `<tr>
+        tbl += `<tr class="${isCrit ? 'row-critical' : ''}">
           <td class="left"><b>${r.location}</b></td>
           <td class="left"><code>${r.line_id}</code></td>
           <td class="left">${r.week_start}</td>
           <td>
-            <div class="util-bar-bg"><div class="util-bar-fill" style="width:${Math.min(100, r.utilization_pct)}%; background:${color};"></div></div>
-            <b style="color:${color};">${r.utilization_pct.toFixed(1)}%</b>
+            <div class="util-bar-bg"><div class="util-bar-fill" style="width:${Math.min(100, r.utilization_pct)}%; background:${barColor};"></div></div>
+            <b style="color:${textColor};">${r.utilization_pct.toFixed(1)}%</b>
           </td>
           <td>${r.used_hours.toFixed(1)} h / ${r.available_hours.toFixed(1)} h</td>
           <td><b>${r.used_quantity.toLocaleString()}</b> / ${r.max_capacity_quantity.toLocaleString()}</td>
           <td class="left">${breakdownStr || '-'}</td>
           <td class="center">${badge}</td>
-          <td>${r.shadow_price > 0 ? `<b style="color:#fda4af;">${r.shadow_price.toFixed(2)}</b>` : '<span class="val-zero">0.00</span>'}</td>
+          <td>${r.shadow_price > 0 ? `<b class="val-danger">${r.shadow_price.toFixed(2)}</b>` : '<span class="val-zero">0.00</span>'}</td>
         </tr>`;
       });
       tbl += '</tbody></table>';
@@ -872,7 +936,7 @@
       const tableEl = document.getElementById('transportTableContainer');
 
       if (flows.length === 0) {
-        chartEl.innerHTML = '<div style="color:var(--text-muted); font-size:13px;">拠点間輸送データがありません。</div>';
+        chartEl.innerHTML = '<div style="color:var(--text-muted); font-size:12.5px;">拠点間輸送データがありません。</div>';
         tableEl.innerHTML = '';
         return;
       }
@@ -897,8 +961,8 @@
           <td class="left"><b>${f.from_location}</b></td>
           <td class="left"><b>${f.to_location}</b></td>
           <td class="left"><span class="badge badge-blue" style="cursor:pointer;" onclick="jumpToSkuPsi('${f.to_location}','${f.sku}')">${f.sku}</span></td>
-          <td class="left" style="${!highlightArrival ? 'color:#38bdf8;font-weight:700;' : ''}">${f.ship_week}</td>
-          <td class="left" style="${highlightArrival ? 'color:#38bdf8;font-weight:700;' : ''}">${f.arrival_week}</td>
+          <td class="left" style="${!highlightArrival ? 'color:#18181b;font-weight:700;' : 'color:var(--text-secondary);'}">${f.ship_week}</td>
+          <td class="left" style="${highlightArrival ? 'color:#18181b;font-weight:700;' : 'color:var(--text-secondary);'}">${f.arrival_week}</td>
           <td>${f.transport_lt} 週</td>
           <td class="${f.qty > 0 ? 'val-pos-supply' : 'val-zero'}">${f.qty.toLocaleString()}</td>
           <td>${f.total_cost.toFixed(1)}</td>
@@ -907,21 +971,21 @@
       tbl += '</tbody></table>';
       tableEl.innerHTML = tbl;
 
-      // Mini bar chart by week
+      // Mini bar chart by week (Monotone)
       const weekTotals = {};
       flows.forEach(f => {
         const w = mode === 'arrival' ? f.arrival_week : f.ship_week.split(' ')[0];
         weekTotals[w] = (weekTotals[w] || 0) + f.qty;
       });
       const maxQ = Math.max(1, ...Object.values(weekTotals));
-      let ch = `<div style="background:#131c2e; border:1px solid var(--border); border-radius:8px; padding:12px;">
-        <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">週別 拠点間輸送量合計 (${mode === 'arrival' ? '着拠点到着週ベース' : '発拠点出荷週ベース'})</div>
-        <div style="display:flex; align-items:flex-end; gap:12px; height:90px;">`;
+      let ch = `<div style="background:var(--bg-card-sub); border:1px solid var(--border); border-radius:3px; padding:12px;">
+        <div style="font-size:11.5px; color:var(--text-muted); font-weight:600; margin-bottom:8px;">週別 拠点間輸送量合計 (${mode === 'arrival' ? '着拠点到着週ベース' : '発拠点出荷週ベース'})</div>
+        <div style="display:flex; align-items:flex-end; gap:12px; height:86px;">`;
       Object.entries(weekTotals).forEach(([w, q]) => {
         const h = Math.max(4, (q / maxQ) * 100);
         ch += `<div style="flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end;">
-          <div style="font-size:11px; color:#38bdf8; font-weight:700;">${q}</div>
-          <div style="width:100%; max-width:48px; height:${h}%; background:#0284c7; border-radius:4px 4px 0 0;"></div>
+          <div style="font-size:11px; color:var(--text-main); font-weight:700;">${q}</div>
+          <div style="width:100%; max-width:44px; height:${h}%; background:#3f3f46; border-radius:2px 2px 0 0;"></div>
           <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">${w.slice(5)}</div>
         </div>`;
       });
@@ -937,20 +1001,20 @@
       const tableEl = document.getElementById('procurementTableContainer');
 
       if (psi.length === 0) {
-        chartEl.innerHTML = '<div style="color:var(--text-muted); font-size:13px;">外部調達対象の品目がありません。</div>';
+        chartEl.innerHTML = '<div style="color:var(--text-muted); font-size:12.5px;">外部調達対象の品目がありません。</div>';
         tableEl.innerHTML = '';
         return;
       }
 
       const maxOrd = Math.max(1, ...psi.map(r => r.order_release_qty));
-      let ch = `<div style="background:#131c2e; border:1px solid var(--border); border-radius:8px; padding:12px;">
-        <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">週別 サプライヤー発注リリース量 (order_release_qty)</div>
-        <div style="display:flex; align-items:flex-end; gap:12px; height:90px;">`;
+      let ch = `<div style="background:var(--bg-card-sub); border:1px solid var(--border); border-radius:3px; padding:12px;">
+        <div style="font-size:11.5px; color:var(--text-muted); font-weight:600; margin-bottom:8px;">週別 サプライヤー発注リリース量 (order_release_qty)</div>
+        <div style="display:flex; align-items:flex-end; gap:12px; height:86px;">`;
       psi.forEach(r => {
         const h = Math.max(4, (r.order_release_qty / maxOrd) * 100);
         ch += `<div style="flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end;">
-          <div style="font-size:11px; color:#c084fc; font-weight:700;">${r.order_release_qty}</div>
-          <div style="width:100%; max-width:44px; height:${h}%; background:#9333ea; border-radius:4px 4px 0 0;" title="${r.location} / ${r.sku}"></div>
+          <div style="font-size:11px; color:var(--text-main); font-weight:700;">${r.order_release_qty}</div>
+          <div style="width:100%; max-width:42px; height:${h}%; background:#52525b; border-radius:2px 2px 0 0;" title="${r.location} / ${r.sku}"></div>
           <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">${r.sku} (${r.week_start.slice(5)})</div>
         </div>`;
       });
@@ -992,8 +1056,8 @@
       const tableEl = document.getElementById('shortageTableContainer');
 
       if (diags.length === 0) {
-        tableEl.innerHTML = `<div style="padding:16px; color:#34d399; font-weight:600;">
-          ✅ 全拠点・全SKU・全週において、販売欠品および安全在庫目標割れは 0 件です（需要充足率 100.0%）。
+        tableEl.innerHTML = `<div style="padding:14px; color:var(--text-secondary); font-weight:600;">
+          [正常] 全拠点・全SKU・全週において、販売欠品および安全在庫目標割れは 0 件です（需要充足率 100.0%）。
         </div>`;
         return;
       }
@@ -1008,25 +1072,26 @@
             <th>欠品量 (Shortage)</th>
             <th>安全在庫不足</th>
             <th class="left">特定された上流ボトルネック・主因 (Primary Root Cause)</th>
-            <th class="center">詳細・AI診断アクション</th>
+            <th class="center">詳細・要因診断アクション</th>
           </tr>
         </thead>
         <tbody>`;
       diags.forEach(d => {
-        const badge = d.issue_type === 'shortage'
-          ? '<span class="badge badge-red">🚨 販売欠品</span>'
-          : '<span class="badge badge-amber">⚠️ 安全在庫割れ</span>';
-        tbl += `<tr>
+        const isShortage = d.issue_type === 'shortage';
+        const badge = isShortage
+          ? '<span class="badge badge-red">販売欠品</span>'
+          : '<span class="badge badge-amber">安全在庫割れ</span>';
+        tbl += `<tr class="${isShortage ? 'row-critical' : ''}">
           <td class="left">${badge}</td>
           <td class="left"><b>${d.location}</b></td>
           <td class="left"><code>${d.sku}</code></td>
           <td class="left">${d.week_start}</td>
           <td class="${d.shortage_qty > 0 ? 'val-danger' : 'val-zero'}">${d.shortage_qty.toLocaleString()} 個</td>
-          <td style="color:#fcd34d;">${d.ss_deficit_qty.toLocaleString()} 個</td>
+          <td style="font-weight:${d.ss_deficit_qty > 0 ? '700' : '400'};">${d.ss_deficit_qty.toLocaleString()} 個</td>
           <td class="left" style="max-width:480px; white-space:normal;"><b>${d.primary_cause}</b></td>
           <td class="center">
-            <button class="btn btn-sm btn-outline" onclick="jumpToSkuPsi('${d.location}','${d.sku}')">📊 SKU明細</button>
-            <button class="btn btn-sm btn-primary" onclick="jumpToQaFor('${d.location}','${d.sku}','${d.week_start}')">💬 なぜ欠品？AI診断</button>
+            <button class="btn btn-sm btn-outline" onclick="jumpToSkuPsi('${d.location}','${d.sku}')">SKU明細</button>
+            <button class="btn btn-sm btn-primary" onclick="jumpToQaFor('${d.location}','${d.sku}','${d.week_start}')">要因診断</button>
           </td>
         </tr>`;
       });
@@ -1101,10 +1166,10 @@
           first.can_produce ? `<span class="badge badge-blue">製造品 (Line: ${first.line_id || 'DEFAULT'})</span>` : '',
           first.can_replenish ? `<span class="badge badge-green">拠点間補充対象</span>` : '',
           first.can_procure ? `<span class="badge badge-purple">外部サプライヤー調達品</span>` : '',
-          hasShortage ? `<span class="badge badge-red">🚨 欠品発生あり</span>` : `<span class="badge badge-green">✅ 欠品ゼロ</span>`
+          hasShortage ? `<span class="badge badge-red">欠品発生あり</span>` : `<span class="badge badge-green">欠品ゼロ</span>`
         ].filter(Boolean).join(' ');
 
-        // Build visual bar + inventory combo chart
+        // Build visual bar + inventory combo chart (Monotone + Dark Red only for shortage)
         const maxScale = Math.max(
           10,
           ...rows.map(r => Math.max(
@@ -1115,18 +1180,17 @@
           ))
         );
 
-        let comboChart = `<div style="background:#131c2e; border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:14px;">
-          <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-muted); margin-bottom:10px;">
-            <span>週次 PSI バランス推移（供給 / 需要 / 期末在庫 / 安全在庫目標 / 欠品）</span>
-            <div style="display:flex; gap:12px;">
-              <span style="color:#34d399;">■ 入庫(生産/輸送/調達)</span>
-              <span style="color:#fb923c;">■ 需要(販売/BOM/出荷)</span>
-              <span style="color:#60a5fa;">■ 期末在庫</span>
-              <span style="color:#fcd34d;">■ 安全在庫目標</span>
-              <span style="color:#f43f5e;">■ 欠品量</span>
+        let comboChart = `<div style="background:var(--bg-card-sub); border:1px solid var(--border); border-radius:3px; padding:12px 14px; margin-bottom:14px;">
+          <div style="display:flex; flex-wrap:wrap; justify-content:space-between; font-size:11.5px; color:var(--text-muted); margin-bottom:10px;">
+            <span style="font-weight:600;">週次 PSI バランス推移（供給 / 需要 / 期末在庫 / 欠品）</span>
+            <div style="display:flex; gap:14px; font-weight:600;">
+              <span style="color:#18181b;">■ 入庫(生産/輸送/調達)</span>
+              <span style="color:#71717a;">■ 需要(販売/BOM/出荷)</span>
+              <span style="color:#a1a1aa;">■ 期末在庫</span>
+              <span style="color:#991b1b;">■ 欠品量</span>
             </div>
           </div>
-          <div style="display:flex; gap:16px; align-items:flex-end; height:130px; padding-top:14px; border-bottom:1px solid #334155;">`;
+          <div style="display:flex; gap:16px; align-items:flex-end; height:120px; padding-top:12px; border-bottom:1px solid var(--border);">`;
 
         rows.forEach(r => {
           const supply = r.production_qty + r.transport_in_qty + r.procurement_in_qty + r.scheduled_receipt_qty;
@@ -1138,17 +1202,17 @@
 
           comboChart += `<div style="flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end;">
             <div style="display:flex; align-items:flex-end; gap:4px; height:100%; width:100%; justify-content:center;">
-              <div style="width:16px; height:${Math.max(2, hSup)}%; background:#10b981; border-radius:3px 3px 0 0;" title="総入庫: ${supply}"></div>
-              <div style="width:16px; height:${Math.max(2, hDem)}%; background:#fb923c; border-radius:3px 3px 0 0;" title="総需要: ${demand}"></div>
-              <div style="width:16px; height:${Math.max(2, hInv)}%; background:#3b82f6; border-radius:3px 3px 0 0;" title="期末在庫: ${r.ending_inv} (安全在庫目標: ${r.safety_stock_target})"></div>
-              ${r.shortage_qty > 0 ? `<div style="width:16px; height:${Math.max(6, hShort)}%; background:#f43f5e; border-radius:3px 3px 0 0;" title="欠品: ${r.shortage_qty}"></div>` : ''}
+              <div style="width:15px; height:${Math.max(2, hSup)}%; background:#18181b; border-radius:2px 2px 0 0;" title="総入庫: ${supply}"></div>
+              <div style="width:15px; height:${Math.max(2, hDem)}%; background:#71717a; border-radius:2px 2px 0 0;" title="総需要: ${demand}"></div>
+              <div style="width:15px; height:${Math.max(2, hInv)}%; background:#d4d4d8; border:1px solid #a1a1aa; border-bottom:none; border-radius:2px 2px 0 0;" title="期末在庫: ${r.ending_inv} (安全在庫目標: ${r.safety_stock_target})"></div>
+              ${r.shortage_qty > 0 ? `<div style="width:15px; height:${Math.max(6, hShort)}%; background:#991b1b; border-radius:2px 2px 0 0;" title="欠品: ${r.shortage_qty}"></div>` : ''}
             </div>
           </div>`;
         });
         comboChart += `</div><div style="display:flex; gap:16px; margin-top:6px;">`;
         rows.forEach(r => {
           comboChart += `<div style="flex:1; text-align:center; font-size:11px; color:var(--text-muted);">
-            <b>${r.week_start}</b><br/>在庫:${r.ending_inv} ${r.shortage_qty > 0 ? `<span style="color:#f43f5e;">(欠品:${r.shortage_qty})</span>` : ''}
+            <b style="color:var(--text-secondary);">${r.week_start}</b><br/>在庫:${r.ending_inv} ${r.shortage_qty > 0 ? `<span class="val-danger">(欠品:${r.shortage_qty})</span>` : ''}
           </div>`;
         });
         comboChart += `</div></div>`;
@@ -1164,11 +1228,11 @@
         html += `<div class="card">
           <div class="card-header">
             <div>
-              <div class="card-title">📍 拠点: <code>${first.location}</code> × 品目: <code>${first.sku}</code></div>
+              <div class="card-title">拠点: <code>${first.location}</code> × 品目: <code>${first.sku}</code></div>
               <div style="margin-top:6px;">${roleBadges}</div>
             </div>
             <div>
-              <button class="btn btn-sm btn-outline" onclick="jumpToQaFor('${first.location}','${first.sku}','${rows[0].week_start}')">💬 このSKUについてAIに質問</button>
+              <button class="btn btn-sm btn-outline" onclick="jumpToQaFor('${first.location}','${first.sku}','${rows[0].week_start}')">このSKUを要因診断</button>
             </div>
           </div>
           ${comboChart}
@@ -1264,7 +1328,7 @@
       const q = document.getElementById('qaQuestionInput').value.trim();
       if (!q || !currentRequest) return;
       const ansEl = document.getElementById('qaAnswerContainer');
-      ansEl.innerHTML = '<div style="color:var(--text-muted);">🔄 上流サプライチェーンの因果グラフを解析中...</div>';
+      ansEl.innerHTML = '<div style="color:var(--text-muted);">上流サプライチェーンの因果グラフを解析中...</div>';
 
       const apiKey = document.getElementById('geminiApiKeyInput').value.trim();
 
@@ -1286,7 +1350,7 @@
             <span style="font-size:12px; color:var(--text-muted);">質問: 「${escapeHtml(q)}」</span>
           </div>` + simpleMarkdownToHtml(data.answer_markdown || '');
       } catch (err) {
-        ansEl.innerHTML = `<div style="color:#f43f5e;">問い合わせエラー: ${escapeHtml(err.message)}</div>`;
+        ansEl.innerHTML = `<div class="val-danger">問い合わせエラー: ${escapeHtml(err.message)}</div>`;
       }
     }
 
@@ -1296,15 +1360,15 @@
         el.innerHTML = '';
         return;
       }
-      let html = `<div style="background:rgba(16, 185, 129, 0.08); border:1px solid rgba(16, 185, 129, 0.35); border-radius:8px; padding:12px 16px;">
-        <div style="font-size:13px; font-weight:700; color:#34d399; margin-bottom:8px;">
-          ⚡ ワンクリック解消シミュレーション（What-If 処方箋を適用して再最適化）
+      let html = `<div style="background:var(--bg-card-sub); border:1px solid var(--border); border-left:3px solid var(--primary); border-radius:3px; padding:12px 15px;">
+        <div style="font-size:12.5px; font-weight:700; color:var(--text-main); margin-bottom:8px;">
+          解消シミュレーション（What-If 処方箋を適用して再最適化）
         </div>
         <div style="display:flex; flex-wrap:wrap; gap:8px;">`;
       actions.forEach((act, idx) => {
         const encoded = encodeURIComponent(JSON.stringify(act));
-        html += `<button class="btn btn-sm btn-emerald" onclick="applyWhatIfAction('${encoded}')" title="${escapeHtml(act.description)}">
-          🔧 処方箋${idx + 1}: ${escapeHtml(act.label)} を適用して再計算
+        html += `<button class="btn btn-sm btn-primary" onclick="applyWhatIfAction('${encoded}')" title="${escapeHtml(act.description)}">
+          処方箋 ${idx + 1}: ${escapeHtml(act.label)} を適用して再計算
         </button>`;
       });
       html += `</div></div>`;
@@ -1357,8 +1421,8 @@
       const diags = currentResponse.root_causes || [];
       const el = document.getElementById('rootCauseChainsContainer');
       if (diags.length === 0) {
-        el.innerHTML = `<div style="color:#34d399; font-weight:600; font-size:13px;">
-          ✅ 現在の計画には欠品や安全在庫割れが存在しないため、異常因果チェーンは 0 件です。
+        el.innerHTML = `<div style="color:var(--text-secondary); font-weight:600; font-size:12.5px;">
+          [正常] 現在の計画には欠品や安全在庫割れが存在しないため、異常因果チェーンは 0 件です。
         </div>`;
         return;
       }
@@ -1366,18 +1430,18 @@
       let html = '';
       diags.forEach((d, idx) => {
         const isCrit = d.issue_type === 'shortage';
-        html += `<div style="background:#111827; border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:12px;">
+        html += `<div style="background:var(--bg-card); border:1px solid var(--border); border-radius:3px; padding:14px; margin-bottom:12px;">
           <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-            <div style="font-weight:700; font-size:14px;">
-              ${isCrit ? '🚨' : '⚠️'} 診断 #${idx + 1}: <code>${d.location}</code> / <code>${d.sku}</code> （${d.week_start}週）
-              — ${isCrit ? `<span style="color:#f43f5e;">欠品 ${d.shortage_qty} 個</span>` : `<span style="color:#fcd34d;">安全在庫不足 ${d.ss_deficit_qty} 個</span>`}
+            <div style="font-weight:700; font-size:13px;">
+              [${isCrit ? '重大異常: 欠品' : '注意: 安全在庫割れ'}] 診断 #${idx + 1}: <code>${d.location}</code> / <code>${d.sku}</code> （${d.week_start}週）
+              — ${isCrit ? `<span class="val-danger">欠品 ${d.shortage_qty} 個</span>` : `<span style="color:var(--text-secondary);">安全在庫不足 ${d.ss_deficit_qty} 個</span>`}
             </div>
             <span class="badge ${isCrit ? 'badge-red' : 'badge-amber'}">主因: ${escapeHtml(d.primary_cause)}</span>
           </div>
           <div class="causal-chain">`;
         (d.factors || []).forEach(f => {
           html += `<div class="causal-step ${isCrit ? 'crit' : 'warn'}">
-            <div style="font-size:11px; color:var(--text-muted); font-weight:600;">
+            <div style="font-size:11px; color:var(--text-muted); font-weight:700;">
               Step ${f.step} [${escapeHtml(f.category)}] — 対象: ${escapeHtml(f.location)} / ${escapeHtml(f.target_id)} (${escapeHtml(f.week_start)}週)
             </div>
             <div style="margin-top:2px;">${escapeHtml(f.summary)}</div>
@@ -1437,7 +1501,7 @@
         } else if (/^\d+\.\s/.test(trimmed)) {
           html += `<div style="margin:4px 0; font-weight:600;">${formatInlineMd(trimmed)}</div>`;
         } else if (trimmed.startsWith('> ')) {
-          html += `<div style="background:rgba(59,130,246,0.1); border-left:3px solid #3b82f6; padding:8px 12px; margin:8px 0; border-radius:4px;">${formatInlineMd(trimmed.slice(2))}</div>`;
+          html += `<div style="background:#f4f4f5; border-left:3px solid #18181b; padding:8px 12px; margin:8px 0; border-radius:2px;">${formatInlineMd(trimmed.slice(2))}</div>`;
         } else if (trimmed.length > 0) {
           html += `<p style="margin:6px 0;">${formatInlineMd(trimmed)}</p>`;
         }
