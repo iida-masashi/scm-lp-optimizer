@@ -1,0 +1,1458 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SCM LP Optimizer — 需給計画・設備稼働・PSI・AI原因診断ダッシュボード</title>
+  <style>
+    :root {
+      --bg-main: #0f172a;
+      --bg-card: #1e293b;
+      --bg-card-hover: #26354d;
+      --bg-input: #0b1120;
+      --border: #334155;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --accent-blue: #3b82f6;
+      --accent-indigo: #6366f1;
+      --accent-emerald: #10b981;
+      --accent-amber: #f59e0b;
+      --accent-rose: #f43f5e;
+      --accent-cyan: #06b6d4;
+      --accent-purple: #a855f7;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Hiragino Sans', 'Meiryo', sans-serif;
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+    /* Top Header */
+    .topbar {
+      background: linear-gradient(90deg, #0b1120 0%, #1e293b 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-badge {
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-indigo));
+      color: #fff;
+      font-weight: 700;
+      font-size: 13px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      letter-spacing: 0.5px;
+    }
+    .brand h1 {
+      font-size: 17px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .brand-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+    }
+    select, input[type="text"], input[type="password"], textarea {
+      background: var(--bg-input);
+      color: var(--text-main);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 7px 12px;
+      font-size: 13px;
+      outline: none;
+    }
+    select:focus, input:focus, textarea:focus {
+      border-color: var(--accent-blue);
+    }
+    .btn {
+      cursor: pointer;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      padding: 7px 14px;
+      font-size: 13px;
+      font-weight: 600;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.15s ease;
+    }
+    .btn-primary {
+      background: var(--accent-blue);
+      color: #fff;
+    }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-emerald {
+      background: var(--accent-emerald);
+      color: #052e16;
+    }
+    .btn-emerald:hover { background: #059669; color: #fff; }
+    .btn-outline {
+      background: transparent;
+      border-color: var(--border);
+      color: var(--text-main);
+    }
+    .btn-outline:hover { background: var(--bg-card-hover); border-color: var(--text-muted); }
+    .btn-sm {
+      padding: 4px 10px;
+      font-size: 12px;
+    }
+    .status-pill {
+      font-size: 12px;
+      padding: 5px 10px;
+      border-radius: 999px;
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      font-weight: 600;
+    }
+    /* Navigation Tabs */
+    .nav-tabs {
+      display: flex;
+      gap: 8px;
+      padding: 12px 24px 0;
+      border-bottom: 1px solid var(--border);
+      background: #111827;
+    }
+    .nav-tab {
+      padding: 10px 18px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      border-bottom: 3px solid transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.15s;
+    }
+    .nav-tab:hover { color: var(--text-main); }
+    .nav-tab.active {
+      color: #60a5fa;
+      border-bottom-color: var(--accent-blue);
+      background: rgba(59, 130, 246, 0.08);
+    }
+    .tab-badge {
+      font-size: 11px;
+      padding: 1px 7px;
+      border-radius: 99px;
+      background: #334155;
+      color: #f8fafc;
+    }
+    .tab-badge.danger {
+      background: rgba(244, 63, 94, 0.25);
+      color: #fda4af;
+      border: 1px solid rgba(244, 63, 94, 0.4);
+    }
+    /* Main Container */
+    .container {
+      max-width: 1600px;
+      margin: 0 auto;
+      padding: 20px 24px 48px;
+    }
+    .screen { display: none; }
+    .screen.active { display: block; }
+    /* KPI Grid */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    .kpi-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .kpi-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .kpi-val {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+    .kpi-sub {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+    /* Grid & Cards */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(640px, 1fr));
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px;
+      margin-bottom: 18px;
+    }
+    .card-header {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.07);
+    }
+    .card-title {
+      font-size: 15px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+    /* Tables */
+    .table-wrap {
+      overflow-x: auto;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      background: #131c2e;
+    }
+    th, td {
+      padding: 8px 12px;
+      border-bottom: 1px solid #26334d;
+      text-align: right;
+      white-space: nowrap;
+    }
+    th {
+      background: #1e293b;
+      color: #cbd5e1;
+      font-weight: 600;
+      font-size: 12px;
+      position: sticky;
+      top: 0;
+    }
+    th.left, td.left { text-align: left; }
+    th.center, td.center { text-align: center; }
+    tr:hover td { background: rgba(59, 130, 246, 0.06); }
+    /* Badges & Heatmap Cells */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .badge-red { background: rgba(244, 63, 94, 0.2); color: #fda4af; border: 1px solid rgba(244, 63, 94, 0.4); }
+    .badge-amber { background: rgba(245, 158, 11, 0.2); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.4); }
+    .badge-green { background: rgba(16, 185, 129, 0.2); color: #6ee7b7; border: 1px solid rgba(16, 185, 129, 0.4); }
+    .badge-blue { background: rgba(59, 130, 246, 0.2); color: #93c5fd; border: 1px solid rgba(59, 130, 246, 0.4); }
+    .badge-purple { background: rgba(168, 85, 247, 0.2); color: #d8b4fe; border: 1px solid rgba(168, 85, 247, 0.4); }
+
+    .util-bar-bg {
+      width: 110px;
+      height: 8px;
+      background: #0f172a;
+      border-radius: 4px;
+      overflow: hidden;
+      display: inline-block;
+      vertical-align: middle;
+      margin-right: 6px;
+    }
+    .util-bar-fill {
+      height: 100%;
+      border-radius: 4px;
+    }
+    /* PSI Row Highlights */
+    .psi-row-inv td { background: rgba(59, 130, 246, 0.08); font-weight: 700; }
+    .psi-row-shortage td { background: rgba(244, 63, 94, 0.12); color: #fda4af; font-weight: 700; }
+    .psi-row-ss td { color: #fcd34d; }
+    .val-zero { color: #475569; }
+    .val-pos-supply { color: #34d399; font-weight: 600; }
+    .val-neg-demand { color: #fb923c; }
+    .val-danger { color: #fb7185; font-weight: 700; }
+
+    /* Q&A Screen */
+    .chip-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    .chip {
+      background: rgba(59, 130, 246, 0.12);
+      border: 1px solid rgba(59, 130, 246, 0.35);
+      color: #93c5fd;
+      padding: 6px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .chip:hover {
+      background: rgba(59, 130, 246, 0.25);
+      color: #fff;
+    }
+    .qa-box {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 16px;
+    }
+    .qa-box input {
+      flex: 1;
+      padding: 10px 14px;
+      font-size: 14px;
+    }
+    .causal-chain {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin: 12px 0;
+    }
+    .causal-step {
+      background: #131c2e;
+      border-left: 4px solid var(--accent-blue);
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 13px;
+    }
+    .causal-step.crit { border-left-color: var(--accent-rose); }
+    .causal-step.warn { border-left-color: var(--accent-amber); }
+    .md-output {
+      background: #0b1120;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px 22px;
+      font-size: 14px;
+      line-height: 1.7;
+    }
+    .md-output h3 { color: #93c5fd; margin: 14px 0 8px; font-size: 16px; }
+    .md-output h3:first-child { margin-top: 0; }
+    .md-output h4 { color: #fde68a; margin: 12px 0 6px; font-size: 14px; }
+    .md-output ul { padding-left: 20px; margin: 6px 0; }
+    .md-output hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+    .md-output code {
+      background: #1e293b;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-family: Consolas, monospace;
+      font-size: 12px;
+      color: #e2e8f0;
+    }
+    /* Modal / Drawer for JSON Editor */
+    .json-drawer {
+      display: none;
+      background: #0b1120;
+      border-bottom: 1px solid var(--border);
+      padding: 16px 24px;
+    }
+    .json-drawer.open { display: block; }
+  </style>
+</head>
+<body>
+
+  <!-- Top Bar -->
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-badge">Clarabel LP</span>
+      <div>
+        <h1>SCM LP Optimizer 可視化＆AI原因診断コンソール</h1>
+        <div class="brand-sub">工場ライン週別稼働率・拠点間輸送・発注・欠品・SKU別PSI明細・自然言語Q&A</div>
+      </div>
+    </div>
+    <div class="controls">
+      <label style="font-size:12px; color:var(--text-muted);">シナリオ選択:</label>
+      <select id="scenarioSelect" onchange="loadSelectedScenario()">
+        <option value="shortage_bottleneck">🔥 シナリオ1: 需要急増・ライン能力上限＆欠品発生ケース (原因診断デモ)</option>
+        <option value="basic_2echelon">✅ シナリオ2: 標準2階層ネットワーク (PLANT-A ➔ DC-EAST / 欠品ゼロ)</option>
+        <option value="multi_plant_quota">🌐 シナリオ3: 2工場・2DC クォータ配分＆多段階BOMケース</option>
+      </select>
+      <button class="btn btn-outline" onclick="toggleJsonDrawer()">📝 入力JSON編集 / アップロード</button>
+      <button class="btn btn-primary" onclick="runOptimization()">⚡ 最適化を実行</button>
+      <span id="solverStatusPill" class="status-pill">待機中</span>
+    </div>
+  </header>
+
+  <!-- Collapsible JSON Input Editor / File Uploader -->
+  <div id="jsonDrawer" class="json-drawer">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+      <div style="font-size:13px; font-weight:600;">
+        入力ペイロード (`OptimizeRequestPayload` JSON) — 直接編集して「⚡ 最適化を実行」を押すとリアルタイムに再計算されます
+      </div>
+      <div style="display:flex; gap:8px;">
+        <input type="file" id="jsonFileInput" accept=".json" style="font-size:12px;" onchange="uploadJsonFile(event)" />
+        <button class="btn btn-sm btn-outline" onclick="downloadCurrentJson()">💾 JSON保存</button>
+        <button class="btn btn-sm btn-outline" onclick="toggleJsonDrawer()">✖ 閉じる</button>
+      </div>
+    </div>
+    <textarea id="requestJsonArea" rows="12" style="width:100%; font-family:Consolas, monospace; font-size:12px;"></textarea>
+  </div>
+
+  <!-- 3 Screen Navigation Tabs -->
+  <nav class="nav-tabs">
+    <button class="nav-tab active" id="tabBtn-summary" onclick="switchTab('summary')">
+      🏭 画面1: 全体サマリ（ライン稼働率・拠点間輸送・発注・欠品）
+      <span id="badgeShortageCount" class="tab-badge">0</span>
+    </button>
+    <button class="nav-tab" id="tabBtn-psi" onclick="switchTab('psi')">
+      📊 画面2: SKUレベル PSI 明細・在庫推移
+      <span id="badgeSkuCount" class="tab-badge">0 SKU</span>
+    </button>
+    <button class="nav-tab" id="tabBtn-qa" onclick="switchTab('qa')">
+      💬 画面3: AI 自然言語 Q&A・欠品原因診断 (Root-Cause & What-If)
+      <span id="badgeDiagCount" class="tab-badge danger">診断</span>
+    </button>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="container">
+
+    <!-- =====================================================================
+         SCREEN 1: 全体サマリ（工場ライン稼働率・拠点間輸送・発注・欠品）
+         ===================================================================== -->
+    <section id="screen-summary" class="screen active">
+      <!-- Top KPI Cards -->
+      <div class="kpi-grid" id="summaryKpiGrid"></div>
+
+      <!-- Row 1: Production Line Weekly Utilization -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">① 生産工場のラインごとの週別稼働率（Capacity Utilization & Shadow Price）</div>
+            <div class="card-desc">
+              各工場の製造ラインにおける週別の稼働率（%）、使用時間/稼働可能時間（h）、生産数量/上限数量、および能力制約の双対変数（Shadow Price: 能力1単位増強あたりのコスト改善価値）を表示します。
+            </div>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <span class="badge badge-green">0〜79%: 余裕あり</span>
+            <span class="badge badge-amber">80〜99%: 高負荷</span>
+            <span class="badge badge-red">100%: ボトルネック律速</span>
+          </div>
+        </div>
+        <div id="lineUtilChartContainer" style="margin-bottom:16px;"></div>
+        <div class="table-wrap" id="lineUtilTableContainer"></div>
+      </div>
+
+      <!-- Row 2: Inter-location Transport & External Procurement -->
+      <div class="grid-2">
+        <!-- Inter-location Transport -->
+        <div class="card" style="margin-bottom:0;">
+          <div class="card-header">
+            <div>
+              <div class="card-title">② 拠点間の輸送量（Inter-Location Transport Flows）</div>
+              <div class="card-desc">発拠点（From）➔ 着拠点（To）× 品目（SKU）ごとの週別輸送数量と輸送リードタイム</div>
+            </div>
+            <div>
+              <select id="transportWeekMode" onchange="renderTransportSection()">
+                <option value="arrival">着拠点の到着週ベース (Arrival Week)</option>
+                <option value="ship">発拠点の出荷週ベース (Ship Week)</option>
+              </select>
+            </div>
+          </div>
+          <div id="transportChartContainer" style="margin-bottom:14px;"></div>
+          <div class="table-wrap" id="transportTableContainer"></div>
+        </div>
+
+        <!-- External Order / Procurement -->
+        <div class="card" style="margin-bottom:0;">
+          <div class="card-header">
+            <div>
+              <div class="card-title">③ サプライヤー発注量・調達入荷量（Order Release & Procurement）</div>
+              <div class="card-desc">外部調達品目（原材料・購買品）の週別発注リリース量（`order_release_qty`）と入荷予定</div>
+            </div>
+          </div>
+          <div id="procurementChartContainer" style="margin-bottom:14px;"></div>
+          <div class="table-wrap" id="procurementTableContainer"></div>
+        </div>
+      </div>
+
+      <!-- Row 3: Shortage & Bottleneck Alert Table -->
+      <div class="card" style="margin-top:18px;">
+        <div class="card-header">
+          <div>
+            <div class="card-title">④ 欠品量（Shortage）・安全在庫割れ ＆ ボトルネック原因一覧</div>
+            <div class="card-desc">
+              需要に対して供給が不足した拠点・SKU・週の一覧と上流主因です。「SKU明細」または「なぜ欠品？AI診断」へワンクリックで遷移できます。
+            </div>
+          </div>
+        </div>
+        <div class="table-wrap" id="shortageTableContainer"></div>
+      </div>
+    </section>
+
+    <!-- =====================================================================
+         SCREEN 2: SKUレベル PSI 明細・在庫推移画面
+         ===================================================================== -->
+    <section id="screen-psi" class="screen">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">🔍 SKUレベル 週次 PSI（Production / Supply / Inventory）明細フィルタ</div>
+            <div class="card-desc">拠点・品目（SKU）・ステータスで絞り込み、期首在庫から入庫・需要・出荷・期末在庫・安全在庫・欠品までの完全な物質収支を確認します。</div>
+          </div>
+          <div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center;">
+            <label style="font-size:12px;">拠点:</label>
+            <select id="psiFilterLoc" onchange="renderPsiScreen()"></select>
+            <label style="font-size:12px;">品目 (SKU):</label>
+            <select id="psiFilterSku" onchange="renderPsiScreen()"></select>
+            <label style="font-size:12px;">状態フィルタ:</label>
+            <select id="psiFilterStatus" onchange="renderPsiScreen()">
+              <option value="all">すべて表示</option>
+              <option value="shortage">🚨 欠品発生 (Shortage > 0) のみ</option>
+              <option value="ss_deficit">⚠️ 安全在庫割れ (SS Deficit > 0) のみ</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div id="psiCardsContainer"></div>
+    </section>
+
+    <!-- =====================================================================
+         SCREEN 3: AI 自然言語 Q&A・欠品原因診断画面
+         ===================================================================== -->
+    <section id="screen-qa" class="screen">
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">💬 AI 自然言語問い合わせ ＆ 決定論的・欠品原因診断（Root-Cause Tracer）</div>
+            <div class="card-desc">
+              「なぜ欠品が発生するのか？」「どのラインがボトルネックか？」「どうすれば欠品を解消できるか？」などを自然言語で質問できます。<br/>
+              Rust エンジンが下流の欠品から上流の輸送LT・製造ライン能力・BOM原材料・ロット制約までを逆探索し、ファクト数値と解消シミュレーション（What-If 処方箋）を提示します。
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <input type="password" id="geminiApiKeyInput" placeholder="Gemini API Key (任意・未入力でもローカル推論で即答)" style="width:310px; font-size:12px;" />
+          </div>
+        </div>
+
+        <!-- Quick Question Chips -->
+        <div style="font-size:12px; color:var(--text-muted); margin-bottom:6px;">💡 ワンクリック質問サンプル:</div>
+        <div class="chip-list">
+          <span class="chip" onclick="askPreset('なぜ欠品が発生するのか？上流のボトルネックやリードタイムも含めて原因を教えて')">🚨 なぜ欠品が発生するのか？原因を教えて</span>
+          <span class="chip" onclick="askPreset('どの生産工場・製造ラインがボトルネック（稼働率上限）になっているか？')">🏭 どの製造ラインがボトルネックになっているか？</span>
+          <span class="chip" onclick="askPreset('欠品を解消するにはどうすればいいか？具体的な対策と必要能力を教えて')">💡 欠品を解消するための対策（What-If）を教えて</span>
+          <span class="chip" onclick="askPreset('拠点間の輸送量とサプライヤーへの発注量のスケジュールを教えて')">🚚 拠点間輸送量と発注量のスケジュールは？</span>
+          <span class="chip" onclick="askPreset('FG-1 と RAW-1 のSKU別の在庫推移とPSI明細を教えて')">📊 FG-1 と RAW-1 のPSI明細を教えて</span>
+        </div>
+
+        <!-- Input Bar -->
+        <div class="qa-box">
+          <input type="text" id="qaQuestionInput" placeholder="例: なぜ DC-EAST の FG-1 で欠品が発生するのか？どのラインを増強すべきか？" onkeydown="if(event.key==='Enter') submitQuestion();" />
+          <button class="btn btn-primary" onclick="submitQuestion()">🔍 質問・原因診断を実行</button>
+        </div>
+
+        <!-- What-If One-Click Prescriptions -->
+        <div id="qaWhatIfContainer" style="margin-bottom:16px;"></div>
+
+        <!-- Answer Markdown Output -->
+        <div id="qaAnswerContainer" class="md-output">
+          上の質問ボタンをクリックするか、自由な自然言語で質問を入力してください。
+        </div>
+      </div>
+
+      <!-- Visual Root-Cause Chain Cards -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">🔗 検出された欠品・安全在庫割れの因果トレースツリー（Upstream Root-Cause Chains）</div>
+            <div class="card-desc">ソルバーが自動検出した各課題の「発生箇所 ➔ 輸送ルート ➔ 工場ライン能力 ➔ 原材料調達」の因果ステップ一覧</div>
+          </div>
+        </div>
+        <div id="rootCauseChainsContainer"></div>
+      </div>
+    </section>
+
+  </main>
+
+  <script>
+    let EXAMPLES = {};
+    let currentRequest = null;
+    let currentResponse = null;
+
+    async function initApp() {
+      try {
+        const res = await fetch('/examples');
+        EXAMPLES = await res.json();
+        await loadSelectedScenario();
+      } catch (e) {
+        console.error('Initialization error:', e);
+      }
+    }
+
+    function toggleJsonDrawer() {
+      document.getElementById('jsonDrawer').classList.toggle('open');
+    }
+
+    async function loadSelectedScenario() {
+      const key = document.getElementById('scenarioSelect').value;
+      if (!EXAMPLES[key]) return;
+      currentRequest = JSON.parse(JSON.stringify(EXAMPLES[key]));
+      document.getElementById('requestJsonArea').value = JSON.stringify(currentRequest, null, 2);
+      await runOptimization();
+    }
+
+    function uploadJsonFile(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const parsed = JSON.parse(e.target.result);
+          currentRequest = parsed;
+          document.getElementById('requestJsonArea').value = JSON.stringify(parsed, null, 2);
+          await runOptimization();
+        } catch (err) {
+          alert('JSONのパースに失敗しました: ' + err.message);
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function downloadCurrentJson() {
+      const blob = new Blob([document.getElementById('requestJsonArea').value], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'optimize_request.json';
+      a.click();
+    }
+
+    function switchTab(tabId) {
+      ['summary', 'psi', 'qa'].forEach(id => {
+        document.getElementById('screen-' + id).classList.toggle('active', id === tabId);
+        document.getElementById('tabBtn-' + id).classList.toggle('active', id === tabId);
+      });
+    }
+
+    async function runOptimization() {
+      const pill = document.getElementById('solverStatusPill');
+      pill.textContent = '計算中...';
+      try {
+        currentRequest = JSON.parse(document.getElementById('requestJsonArea').value);
+      } catch (err) {
+        alert('入力JSONの構文エラー: ' + err.message);
+        pill.textContent = 'JSONエラー';
+        return;
+      }
+
+      try {
+        const res = await fetch('/optimize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(currentRequest)
+        });
+        const data = await res.json();
+        if (!res.ok || data.status === 'error') {
+          pill.textContent = 'エラー';
+          alert('最適化エラー: ' + (data.error_msg || JSON.stringify(data)));
+          return;
+        }
+        currentResponse = data;
+        pill.textContent = `Optimal (${data.elapsed_ms} ms)`;
+        renderAllScreens();
+      } catch (err) {
+        pill.textContent = '通信エラー';
+        console.error(err);
+      }
+    }
+
+    function renderAllScreens() {
+      if (!currentResponse) return;
+      const psi = currentResponse.sku_psi_details || [];
+      const totalShortage = psi.reduce((s, r) => s + (r.shortage_qty || 0), 0);
+      const uniqueSkus = new Set(psi.map(r => `${r.location}::${r.sku}`)).size;
+      const diagCount = (currentResponse.root_causes || []).length;
+
+      const sb = document.getElementById('badgeShortageCount');
+      sb.textContent = totalShortage > 0 ? `欠品 ${Math.round(totalShortage)}` : '欠品 0';
+      sb.className = 'tab-badge' + (totalShortage > 0 ? ' danger' : '');
+
+      document.getElementById('badgeSkuCount').textContent = `${uniqueSkus} 拠点×SKU`;
+      document.getElementById('badgeDiagCount').textContent = `${diagCount} 件の診断`;
+
+      renderSummaryScreen();
+      populatePsiFilters();
+      renderPsiScreen();
+      renderRootCauseChains();
+      askPreset('なぜ欠品が発生するのか？上流のボトルネックやリードタイムも含めて原因を教えて', false);
+    }
+
+    // =========================================================================
+    // SCREEN 1 RENDERERS
+    // =========================================================================
+    function renderSummaryScreen() {
+      const psi = currentResponse.sku_psi_details || [];
+      const lineUtils = currentResponse.line_utilizations || [];
+      const flows = currentResponse.transport_flows || [];
+      const bottlenecks = currentResponse.bottlenecks || [];
+
+      const totalDemand = psi.reduce((s, r) => s + r.sales_demand_qty, 0);
+      const totalShortage = psi.reduce((s, r) => s + r.shortage_qty, 0);
+      const totalSsDef = psi.reduce((s, r) => s + r.safety_stock_deficit, 0);
+      const fillRate = totalDemand > 0 ? Math.max(0, ((totalDemand - totalShortage) / totalDemand) * 100) : 100.0;
+
+      const maxUtil = lineUtils.length > 0 ? Math.max(...lineUtils.map(l => l.utilization_pct)) : 0;
+      const avgUtil = lineUtils.length > 0 ? (lineUtils.reduce((s, l) => s + l.utilization_pct, 0) / lineUtils.length) : 0;
+      const totalTransport = flows.reduce((s, f) => s + f.qty, 0);
+      const totalOrderRelease = psi.reduce((s, r) => s + r.order_release_qty, 0);
+      const totalProd = psi.reduce((s, r) => s + r.production_qty, 0);
+
+      document.getElementById('summaryKpiGrid').innerHTML = `
+        <div class="kpi-card">
+          <div class="kpi-label">顧客販売需要 / 充足率 (Fill Rate)</div>
+          <div class="kpi-val" style="color:${fillRate < 99.9 ? '#fda4af' : '#34d399'};">${fillRate.toFixed(1)}%</div>
+          <div class="kpi-sub">総需要: ${totalDemand.toLocaleString()} 個 / 充足: ${(totalDemand - totalShortage).toLocaleString()} 個</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">総欠品量 (Shortage Qty)</div>
+          <div class="kpi-val" style="color:${totalShortage > 0 ? '#f43f5e' : '#34d399'};">${totalShortage.toLocaleString()} 個</div>
+          <div class="kpi-sub">安全在庫目標割れ合計: ${totalSsDef.toLocaleString()} 個</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">工場ライン最大 / 平均稼働率</div>
+          <div class="kpi-val" style="color:${maxUtil >= 99.5 ? '#f59e0b' : '#60a5fa'};">${maxUtil.toFixed(1)}% <span style="font-size:14px; font-weight:500; color:var(--text-muted);">/ 平均 ${avgUtil.toFixed(1)}%</span></div>
+          <div class="kpi-sub">総生産入庫量: ${totalProd.toLocaleString()} 個</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">拠点間 総輸送量 (Transport)</div>
+          <div class="kpi-val" style="color:#38bdf8;">${totalTransport.toLocaleString()} 個</div>
+          <div class="kpi-sub">対象輸送ルート数: ${new Set(flows.map(f => f.from_location + '->' + f.to_location + ':' + f.sku)).size} ルート</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">外部サプライヤー 総発注量</div>
+          <div class="kpi-val" style="color:#a855f7;">${totalOrderRelease.toLocaleString()} 個</div>
+          <div class="kpi-sub">調達リリース (` + '`order_release_qty`' + `) 合計</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">能力ボトルネック週数 (Shadow Price)</div>
+          <div class="kpi-val" style="color:${bottlenecks.length > 0 ? '#fb7185' : '#94a3b8'};">${bottlenecks.length} 箇所</div>
+          <div class="kpi-sub">${bottlenecks.length > 0 ? '最大限界価値: ' + Math.max(...bottlenecks.map(b => Math.abs(b.marginal_value))).toFixed(1) : '能力上限の超過圧なし'}</div>
+        </div>
+      `;
+
+      renderLineUtilizationSection();
+      renderTransportSection();
+      renderProcurementSection();
+      renderShortageSection();
+    }
+
+    function renderLineUtilizationSection() {
+      const lineUtils = currentResponse.line_utilizations || [];
+      const chartEl = document.getElementById('lineUtilChartContainer');
+      const tableEl = document.getElementById('lineUtilTableContainer');
+
+      if (lineUtils.length === 0) {
+        chartEl.innerHTML = '<div style="color:var(--text-muted); font-size:13px;">製造ライン定義がありません。</div>';
+        tableEl.innerHTML = '';
+        return;
+      }
+
+      // Group by (location, line_id)
+      const groups = {};
+      const weeksSet = new Set();
+      lineUtils.forEach(r => {
+        const key = `${r.location} / ${r.line_id}`;
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(r);
+        weeksSet.add(r.week_start);
+      });
+      const weeks = Array.from(weeksSet);
+
+      // Visual Bar Cards per Line
+      let chartHtml = '<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(420px, 1fr)); gap:14px;">';
+      Object.entries(groups).forEach(([lineKey, rows]) => {
+        chartHtml += `<div style="background:#131c2e; border:1px solid var(--border); border-radius:8px; padding:14px;">
+          <div style="font-weight:700; font-size:13px; margin-bottom:10px; display:flex; justify-content:space-between;">
+            <span>🏭 ${lineKey}</span>
+            <span style="color:var(--text-muted); font-size:12px;">基準: ${rows[0].capacity_mode === 'hours' ? '稼働時間 (h)' : '数量 (個)'}</span>
+          </div>
+          <div style="display:flex; align-items:flex-end; gap:14px; height:135px; padding-top:18px; border-bottom:1px solid #334155;">`;
+        rows.forEach(r => {
+          const pct = Math.min(100, r.utilization_pct);
+          const color = r.is_bottleneck || r.utilization_pct >= 99.5 ? '#f43f5e' : (r.utilization_pct >= 80 ? '#f59e0b' : '#10b981');
+          const subText = r.capacity_mode === 'hours'
+            ? `${r.used_hours}h / ${r.available_hours}h`
+            : `${r.used_quantity} / ${r.max_capacity_quantity}`;
+          chartHtml += `
+            <div style="flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end;">
+              <div style="font-size:11px; font-weight:700; color:${color}; margin-bottom:3px;">${r.utilization_pct.toFixed(1)}%</div>
+              <div style="width:100%; max-width:56px; height:${Math.max(4, pct)}%; background:${color}; border-radius:4px 4px 0 0; position:relative;" title="${subText} (生産: ${r.used_quantity}個)"></div>
+            </div>`;
+        });
+        chartHtml += `</div><div style="display:flex; gap:14px; margin-top:6px;">`;
+        rows.forEach(r => {
+          chartHtml += `<div style="flex:1; text-align:center; font-size:11px; color:var(--text-muted);">
+            <div>${r.week_start.slice(5)}</div>
+            <div style="font-size:10px;">${r.used_quantity}個</div>
+          </div>`;
+        });
+        chartHtml += `</div></div>`;
+      });
+      chartHtml += '</div>';
+      chartEl.innerHTML = chartHtml;
+
+      // Detailed Table
+      let tbl = `<table>
+        <thead>
+          <tr>
+            <th class="left">工場拠点</th>
+            <th class="left">製造ライン</th>
+            <th class="left">週 (week_start)</th>
+            <th>稼働率 (%)</th>
+            <th>使用時間 / 可能時間 (h)</th>
+            <th>生産数量 / 能力上限 (個)</th>
+            <th class="left">生産SKU内訳</th>
+            <th class="center">状態</th>
+            <th>潜在価格 (Shadow Price)</th>
+          </tr>
+        </thead>
+        <tbody>`;
+      lineUtils.forEach(r => {
+        const color = r.is_bottleneck || r.utilization_pct >= 99.5 ? '#f43f5e' : (r.utilization_pct >= 80 ? '#f59e0b' : '#10b981');
+        const badge = r.is_bottleneck || r.utilization_pct >= 99.5
+          ? '<span class="badge badge-red">🔴 ボトルネック上限</span>'
+          : (r.utilization_pct >= 80 ? '<span class="badge badge-amber">🟡 高負荷</span>' : '<span class="badge badge-green">🟢 適正</span>');
+        const breakdownStr = (r.sku_breakdown || [])
+          .map(b => `<span class="badge badge-blue" style="cursor:pointer; margin-right:4px;" onclick="jumpToSkuPsi('${r.location}','${b.sku}')">${b.sku}: ${b.production_qty}個 (${b.used_hours}h)</span>`)
+          .join('');
+        tbl += `<tr>
+          <td class="left"><b>${r.location}</b></td>
+          <td class="left"><code>${r.line_id}</code></td>
+          <td class="left">${r.week_start}</td>
+          <td>
+            <div class="util-bar-bg"><div class="util-bar-fill" style="width:${Math.min(100, r.utilization_pct)}%; background:${color};"></div></div>
+            <b style="color:${color};">${r.utilization_pct.toFixed(1)}%</b>
+          </td>
+          <td>${r.used_hours.toFixed(1)} h / ${r.available_hours.toFixed(1)} h</td>
+          <td><b>${r.used_quantity.toLocaleString()}</b> / ${r.max_capacity_quantity.toLocaleString()}</td>
+          <td class="left">${breakdownStr || '-'}</td>
+          <td class="center">${badge}</td>
+          <td>${r.shadow_price > 0 ? `<b style="color:#fda4af;">${r.shadow_price.toFixed(2)}</b>` : '<span class="val-zero">0.00</span>'}</td>
+        </tr>`;
+      });
+      tbl += '</tbody></table>';
+      tableEl.innerHTML = tbl;
+    }
+
+    function renderTransportSection() {
+      const flows = currentResponse.transport_flows || [];
+      const mode = document.getElementById('transportWeekMode').value;
+      const chartEl = document.getElementById('transportChartContainer');
+      const tableEl = document.getElementById('transportTableContainer');
+
+      if (flows.length === 0) {
+        chartEl.innerHTML = '<div style="color:var(--text-muted); font-size:13px;">拠点間輸送データがありません。</div>';
+        tableEl.innerHTML = '';
+        return;
+      }
+
+      let tbl = `<table>
+        <thead>
+          <tr>
+            <th class="left">発拠点 (From)</th>
+            <th class="left">着拠点 (To)</th>
+            <th class="left">品目 (SKU)</th>
+            <th class="left">出荷週 (Ship Week)</th>
+            <th class="left">到着週 (Arrival Week)</th>
+            <th>輸送LT</th>
+            <th>輸送数量 (個)</th>
+            <th>輸送費合計</th>
+          </tr>
+        </thead>
+        <tbody>`;
+      flows.forEach(f => {
+        const highlightArrival = mode === 'arrival';
+        tbl += `<tr>
+          <td class="left"><b>${f.from_location}</b></td>
+          <td class="left"><b>${f.to_location}</b></td>
+          <td class="left"><span class="badge badge-blue" style="cursor:pointer;" onclick="jumpToSkuPsi('${f.to_location}','${f.sku}')">${f.sku}</span></td>
+          <td class="left" style="${!highlightArrival ? 'color:#38bdf8;font-weight:700;' : ''}">${f.ship_week}</td>
+          <td class="left" style="${highlightArrival ? 'color:#38bdf8;font-weight:700;' : ''}">${f.arrival_week}</td>
+          <td>${f.transport_lt} 週</td>
+          <td class="${f.qty > 0 ? 'val-pos-supply' : 'val-zero'}">${f.qty.toLocaleString()}</td>
+          <td>${f.total_cost.toFixed(1)}</td>
+        </tr>`;
+      });
+      tbl += '</tbody></table>';
+      tableEl.innerHTML = tbl;
+
+      // Mini bar chart by week
+      const weekTotals = {};
+      flows.forEach(f => {
+        const w = mode === 'arrival' ? f.arrival_week : f.ship_week.split(' ')[0];
+        weekTotals[w] = (weekTotals[w] || 0) + f.qty;
+      });
+      const maxQ = Math.max(1, ...Object.values(weekTotals));
+      let ch = `<div style="background:#131c2e; border:1px solid var(--border); border-radius:8px; padding:12px;">
+        <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">週別 拠点間輸送量合計 (${mode === 'arrival' ? '着拠点到着週ベース' : '発拠点出荷週ベース'})</div>
+        <div style="display:flex; align-items:flex-end; gap:12px; height:90px;">`;
+      Object.entries(weekTotals).forEach(([w, q]) => {
+        const h = Math.max(4, (q / maxQ) * 100);
+        ch += `<div style="flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end;">
+          <div style="font-size:11px; color:#38bdf8; font-weight:700;">${q}</div>
+          <div style="width:100%; max-width:48px; height:${h}%; background:#0284c7; border-radius:4px 4px 0 0;"></div>
+          <div style="font-size:11px; color:var(--text-muted); margin-top:4px;">${w.slice(5)}</div>
+        </div>`;
+      });
+      ch += `</div></div>`;
+      chartEl.innerHTML = ch;
+    }
+
+    function renderProcurementSection() {
+      const psi = (currentResponse.sku_psi_details || []).filter(
+        r => r.can_procure || r.order_release_qty > 0 || r.procurement_in_qty > 0
+      );
+      const chartEl = document.getElementById('procurementChartContainer');
+      const tableEl = document.getElementById('procurementTableContainer');
+
+      if (psi.length === 0) {
+        chartEl.innerHTML = '<div style="color:var(--text-muted); font-size:13px;">外部調達対象の品目がありません。</div>';
+        tableEl.innerHTML = '';
+        return;
+      }
+
+      const maxOrd = Math.max(1, ...psi.map(r => r.order_release_qty));
+      let ch = `<div style="background:#131c2e; border:1px solid var(--border); border-radius:8px; padding:12px;">
+        <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">週別 サプライヤー発注リリース量 (order_release_qty)</div>
+        <div style="display:flex; align-items:flex-end; gap:12px; height:90px;">`;
+      psi.forEach(r => {
+        const h = Math.max(4, (r.order_release_qty / maxOrd) * 100);
+        ch += `<div style="flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end;">
+          <div style="font-size:11px; color:#c084fc; font-weight:700;">${r.order_release_qty}</div>
+          <div style="width:100%; max-width:44px; height:${h}%; background:#9333ea; border-radius:4px 4px 0 0;" title="${r.location} / ${r.sku}"></div>
+          <div style="font-size:10px; color:var(--text-muted); margin-top:4px;">${r.sku} (${r.week_start.slice(5)})</div>
+        </div>`;
+      });
+      ch += `</div></div>`;
+      chartEl.innerHTML = ch;
+
+      let tbl = `<table>
+        <thead>
+          <tr>
+            <th class="left">拠点</th>
+            <th class="left">調達品目 (SKU)</th>
+            <th class="left">週 (week_start)</th>
+            <th>発注リリース量 (Order Release)</th>
+            <th>当週調達入荷量</th>
+            <th>確定入荷予定 (SR)</th>
+            <th>BOM従属消費量</th>
+            <th>期末在庫</th>
+          </tr>
+        </thead>
+        <tbody>`;
+      psi.forEach(r => {
+        tbl += `<tr>
+          <td class="left"><b>${r.location}</b></td>
+          <td class="left"><span class="badge badge-purple" style="cursor:pointer;" onclick="jumpToSkuPsi('${r.location}','${r.sku}')">${r.sku}</span></td>
+          <td class="left">${r.week_start}</td>
+          <td class="${r.order_release_qty > 0 ? 'val-pos-supply' : 'val-zero'}">${r.order_release_qty.toLocaleString()}</td>
+          <td>${r.procurement_in_qty.toLocaleString()}</td>
+          <td>${r.scheduled_receipt_qty.toLocaleString()}</td>
+          <td class="${r.bom_demand_qty > 0 ? 'val-neg-demand' : 'val-zero'}">${r.bom_demand_qty.toLocaleString()}</td>
+          <td><b>${r.ending_inv.toLocaleString()}</b></td>
+        </tr>`;
+      });
+      tbl += '</tbody></table>';
+      tableEl.innerHTML = tbl;
+    }
+
+    function renderShortageSection() {
+      const diags = currentResponse.root_causes || [];
+      const tableEl = document.getElementById('shortageTableContainer');
+
+      if (diags.length === 0) {
+        tableEl.innerHTML = `<div style="padding:16px; color:#34d399; font-weight:600;">
+          ✅ 全拠点・全SKU・全週において、販売欠品および安全在庫目標割れは 0 件です（需要充足率 100.0%）。
+        </div>`;
+        return;
+      }
+
+      let tbl = `<table>
+        <thead>
+          <tr>
+            <th class="left">重要度 / 種別</th>
+            <th class="left">発生拠点</th>
+            <th class="left">品目 (SKU)</th>
+            <th class="left">発生週</th>
+            <th>欠品量 (Shortage)</th>
+            <th>安全在庫不足</th>
+            <th class="left">特定された上流ボトルネック・主因 (Primary Root Cause)</th>
+            <th class="center">詳細・AI診断アクション</th>
+          </tr>
+        </thead>
+        <tbody>`;
+      diags.forEach(d => {
+        const badge = d.issue_type === 'shortage'
+          ? '<span class="badge badge-red">🚨 販売欠品</span>'
+          : '<span class="badge badge-amber">⚠️ 安全在庫割れ</span>';
+        tbl += `<tr>
+          <td class="left">${badge}</td>
+          <td class="left"><b>${d.location}</b></td>
+          <td class="left"><code>${d.sku}</code></td>
+          <td class="left">${d.week_start}</td>
+          <td class="${d.shortage_qty > 0 ? 'val-danger' : 'val-zero'}">${d.shortage_qty.toLocaleString()} 個</td>
+          <td style="color:#fcd34d;">${d.ss_deficit_qty.toLocaleString()} 個</td>
+          <td class="left" style="max-width:480px; white-space:normal;"><b>${d.primary_cause}</b></td>
+          <td class="center">
+            <button class="btn btn-sm btn-outline" onclick="jumpToSkuPsi('${d.location}','${d.sku}')">📊 SKU明細</button>
+            <button class="btn btn-sm btn-primary" onclick="jumpToQaFor('${d.location}','${d.sku}','${d.week_start}')">💬 なぜ欠品？AI診断</button>
+          </td>
+        </tr>`;
+      });
+      tbl += '</tbody></table>';
+      tableEl.innerHTML = tbl;
+    }
+
+    function jumpToSkuPsi(location, sku) {
+      switchTab('psi');
+      document.getElementById('psiFilterLoc').value = location;
+      document.getElementById('psiFilterSku').value = sku;
+      document.getElementById('psiFilterStatus').value = 'all';
+      renderPsiScreen();
+    }
+
+    function jumpToQaFor(location, sku, week) {
+      switchTab('qa');
+      const q = `なぜ ${location} の ${sku}（${week}週）で欠品または不足が発生するのか？上流のライン稼働率やリードタイムも含めて原因と対策を教えて`;
+      askPreset(q, true);
+    }
+
+    // =========================================================================
+    // SCREEN 2 RENDERERS (SKU-LEVEL PSI MATRIX & CHART)
+    // =========================================================================
+    function populatePsiFilters() {
+      const psi = currentResponse.sku_psi_details || [];
+      const locs = Array.from(new Set(psi.map(r => r.location)));
+      const skus = Array.from(new Set(psi.map(r => r.sku)));
+
+      const locSel = document.getElementById('psiFilterLoc');
+      const prevLoc = locSel.value;
+      locSel.innerHTML = '<option value="ALL">すべての拠点</option>' +
+        locs.map(l => `<option value="${l}">${l}</option>`).join('');
+      if (locs.includes(prevLoc)) locSel.value = prevLoc;
+
+      const skuSel = document.getElementById('psiFilterSku');
+      const prevSku = skuSel.value;
+      skuSel.innerHTML = '<option value="ALL">すべての品目 (SKU)</option>' +
+        skus.map(s => `<option value="${s}">${s}</option>`).join('');
+      if (skus.includes(prevSku)) skuSel.value = prevSku;
+    }
+
+    function renderPsiScreen() {
+      const psi = currentResponse.sku_psi_details || [];
+      const locFilter = document.getElementById('psiFilterLoc').value;
+      const skuFilter = document.getElementById('psiFilterSku').value;
+      const statusFilter = document.getElementById('psiFilterStatus').value;
+
+      // Group by (location, sku)
+      const groups = {};
+      psi.forEach(r => {
+        if (locFilter !== 'ALL' && r.location !== locFilter) return;
+        if (skuFilter !== 'ALL' && r.sku !== skuFilter) return;
+        const k = `${r.location}::${r.sku}`;
+        if (!groups[k]) groups[k] = [];
+        groups[k].push(r);
+      });
+
+      const container = document.getElementById('psiCardsContainer');
+      let html = '';
+
+      Object.entries(groups).forEach(([key, rows]) => {
+        const hasShortage = rows.some(r => r.shortage_qty > 0);
+        const hasSsDef = rows.some(r => r.safety_stock_deficit > 0);
+        if (statusFilter === 'shortage' && !hasShortage) return;
+        if (statusFilter === 'ss_deficit' && !hasSsDef) return;
+
+        const first = rows[0];
+        const weeks = rows.map(r => r.week_start);
+
+        const roleBadges = [
+          first.can_produce ? `<span class="badge badge-blue">製造品 (Line: ${first.line_id || 'DEFAULT'})</span>` : '',
+          first.can_replenish ? `<span class="badge badge-green">拠点間補充対象</span>` : '',
+          first.can_procure ? `<span class="badge badge-purple">外部サプライヤー調達品</span>` : '',
+          hasShortage ? `<span class="badge badge-red">🚨 欠品発生あり</span>` : `<span class="badge badge-green">✅ 欠品ゼロ</span>`
+        ].filter(Boolean).join(' ');
+
+        // Build visual bar + inventory combo chart
+        const maxScale = Math.max(
+          10,
+          ...rows.map(r => Math.max(
+            r.opening_inv + r.production_qty + r.transport_in_qty + r.procurement_in_qty + r.scheduled_receipt_qty,
+            r.sales_demand_qty + r.bom_demand_qty + r.transport_out_qty + r.shortage_qty,
+            r.ending_inv,
+            r.safety_stock_target
+          ))
+        );
+
+        let comboChart = `<div style="background:#131c2e; border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:14px;">
+          <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-muted); margin-bottom:10px;">
+            <span>週次 PSI バランス推移（供給 / 需要 / 期末在庫 / 安全在庫目標 / 欠品）</span>
+            <div style="display:flex; gap:12px;">
+              <span style="color:#34d399;">■ 入庫(生産/輸送/調達)</span>
+              <span style="color:#fb923c;">■ 需要(販売/BOM/出荷)</span>
+              <span style="color:#60a5fa;">■ 期末在庫</span>
+              <span style="color:#fcd34d;">■ 安全在庫目標</span>
+              <span style="color:#f43f5e;">■ 欠品量</span>
+            </div>
+          </div>
+          <div style="display:flex; gap:16px; align-items:flex-end; height:130px; padding-top:14px; border-bottom:1px solid #334155;">`;
+
+        rows.forEach(r => {
+          const supply = r.production_qty + r.transport_in_qty + r.procurement_in_qty + r.scheduled_receipt_qty;
+          const demand = r.sales_demand_qty + r.bom_demand_qty + r.transport_out_qty;
+          const hSup = Math.min(100, (supply / maxScale) * 100);
+          const hDem = Math.min(100, (demand / maxScale) * 100);
+          const hInv = Math.min(100, (r.ending_inv / maxScale) * 100);
+          const hShort = Math.min(100, (r.shortage_qty / maxScale) * 100);
+
+          comboChart += `<div style="flex:1; display:flex; flex-direction:column; align-items:center; height:100%; justify-content:flex-end;">
+            <div style="display:flex; align-items:flex-end; gap:4px; height:100%; width:100%; justify-content:center;">
+              <div style="width:16px; height:${Math.max(2, hSup)}%; background:#10b981; border-radius:3px 3px 0 0;" title="総入庫: ${supply}"></div>
+              <div style="width:16px; height:${Math.max(2, hDem)}%; background:#fb923c; border-radius:3px 3px 0 0;" title="総需要: ${demand}"></div>
+              <div style="width:16px; height:${Math.max(2, hInv)}%; background:#3b82f6; border-radius:3px 3px 0 0;" title="期末在庫: ${r.ending_inv} (安全在庫目標: ${r.safety_stock_target})"></div>
+              ${r.shortage_qty > 0 ? `<div style="width:16px; height:${Math.max(6, hShort)}%; background:#f43f5e; border-radius:3px 3px 0 0;" title="欠品: ${r.shortage_qty}"></div>` : ''}
+            </div>
+          </div>`;
+        });
+        comboChart += `</div><div style="display:flex; gap:16px; margin-top:6px;">`;
+        rows.forEach(r => {
+          comboChart += `<div style="flex:1; text-align:center; font-size:11px; color:var(--text-muted);">
+            <b>${r.week_start}</b><br/>在庫:${r.ending_inv} ${r.shortage_qty > 0 ? `<span style="color:#f43f5e;">(欠品:${r.shortage_qty})</span>` : ''}
+          </div>`;
+        });
+        comboChart += `</div></div>`;
+
+        // Helper to render a PSI matrix row
+        const sumOf = (fn) => rows.reduce((s, r) => s + fn(r), 0);
+        const fmtCell = (val, cls = '') => {
+          const v = Math.round(val * 100) / 100;
+          if (v === 0) return `<td class="val-zero">0</td>`;
+          return `<td class="${cls}">${v.toLocaleString()}</td>`;
+        };
+
+        html += `<div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">📍 拠点: <code>${first.location}</code> × 品目: <code>${first.sku}</code></div>
+              <div style="margin-top:6px;">${roleBadges}</div>
+            </div>
+            <div>
+              <button class="btn btn-sm btn-outline" onclick="jumpToQaFor('${first.location}','${first.sku}','${rows[0].week_start}')">💬 このSKUについてAIに質問</button>
+            </div>
+          </div>
+          ${comboChart}
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th class="left">PSI 項目 (単位: 個)</th>
+                  ${weeks.map(w => `<th>${w}</th>`).join('')}
+                  <th>期間合計 / 期末</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="left"><b>1. 期首在庫 (Opening Inventory)</b></td>
+                  ${rows.map(r => fmtCell(r.opening_inv)).join('')}
+                  <td>${rows[0].opening_inv.toLocaleString()} (期首)</td>
+                </tr>
+                <tr>
+                  <td class="left">2. 生産入庫量 (Production In)</td>
+                  ${rows.map(r => fmtCell(r.production_qty, 'val-pos-supply')).join('')}
+                  <td class="val-pos-supply">${sumOf(r => r.production_qty).toLocaleString()}</td>
+                </tr>
+                <tr>
+                  <td class="left">3. 拠点間輸送入荷 (Transport In)</td>
+                  ${rows.map(r => fmtCell(r.transport_in_qty, 'val-pos-supply')).join('')}
+                  <td class="val-pos-supply">${sumOf(r => r.transport_in_qty).toLocaleString()}</td>
+                </tr>
+                <tr>
+                  <td class="left">4. 外部調達入荷 (Procurement In)</td>
+                  ${rows.map(r => fmtCell(r.procurement_in_qty, 'val-pos-supply')).join('')}
+                  <td class="val-pos-supply">${sumOf(r => r.procurement_in_qty).toLocaleString()}</td>
+                </tr>
+                <tr>
+                  <td class="left" style="padding-left:24px; color:var(--text-muted);">└ 発注リリース量 (Order Release Qty)</td>
+                  ${rows.map(r => fmtCell(r.order_release_qty)).join('')}
+                  <td>${sumOf(r => r.order_release_qty).toLocaleString()}</td>
+                </tr>
+                <tr>
+                  <td class="left">5. 確定入荷予定 (Scheduled Receipts)</td>
+                  ${rows.map(r => fmtCell(r.scheduled_receipt_qty, 'val-pos-supply')).join('')}
+                  <td>${sumOf(r => r.scheduled_receipt_qty).toLocaleString()}</td>
+                </tr>
+                <tr>
+                  <td class="left">6. 顧客販売需要 (Sales Demand)</td>
+                  ${rows.map(r => fmtCell(r.sales_demand_qty, 'val-neg-demand')).join('')}
+                  <td class="val-neg-demand">${sumOf(r => r.sales_demand_qty).toLocaleString()}</td>
+                </tr>
+                <tr>
+                  <td class="left">7. BOM従属消費 (Dependent BOM Demand)</td>
+                  ${rows.map(r => fmtCell(r.bom_demand_qty, 'val-neg-demand')).join('')}
+                  <td class="val-neg-demand">${sumOf(r => r.bom_demand_qty).toLocaleString()}</td>
+                </tr>
+                <tr>
+                  <td class="left">8. 他拠点への輸送出荷 (Transport Out)</td>
+                  ${rows.map(r => fmtCell(r.transport_out_qty, 'val-neg-demand')).join('')}
+                  <td class="val-neg-demand">${sumOf(r => r.transport_out_qty).toLocaleString()}</td>
+                </tr>
+                <tr class="psi-row-inv">
+                  <td class="left"><b>9. 期末在庫 (Ending Inventory)</b></td>
+                  ${rows.map(r => `<td>${r.ending_inv.toLocaleString()}</td>`).join('')}
+                  <td>${rows[rows.length - 1].ending_inv.toLocaleString()} (期末)</td>
+                </tr>
+                <tr class="psi-row-ss">
+                  <td class="left">10. 安全在庫目標 (Safety Stock Target)</td>
+                  ${rows.map(r => `<td>${r.safety_stock_target.toLocaleString()}${r.safety_stock_deficit > 0 ? ` <span class="badge badge-amber">-${r.safety_stock_deficit}</span>` : ''}</td>`).join('')}
+                  <td>-</td>
+                </tr>
+                <tr class="psi-row-shortage">
+                  <td class="left"><b>11. 欠品量 (Shortage / Unfulfilled Demand)</b></td>
+                  ${rows.map(r => fmtCell(r.shortage_qty, 'val-danger')).join('')}
+                  <td class="val-danger">${sumOf(r => r.shortage_qty).toLocaleString()}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>`;
+      });
+
+      container.innerHTML = html || '<div class="card">条件に一致する拠点×SKUがありません。</div>';
+    }
+
+    // =========================================================================
+    // SCREEN 3 RENDERERS (NATURAL LANGUAGE Q&A & ROOT-CAUSE CHAINS)
+    // =========================================================================
+    async function askPreset(questionText, switchToQa = false) {
+      if (switchToQa) switchTab('qa');
+      document.getElementById('qaQuestionInput').value = questionText;
+      await submitQuestion();
+    }
+
+    async function submitQuestion() {
+      const q = document.getElementById('qaQuestionInput').value.trim();
+      if (!q || !currentRequest) return;
+      const ansEl = document.getElementById('qaAnswerContainer');
+      ansEl.innerHTML = '<div style="color:var(--text-muted);">🔄 上流サプライチェーンの因果グラフを解析中...</div>';
+
+      const apiKey = document.getElementById('geminiApiKeyInput').value.trim();
+
+      try {
+        const res = await fetch('/ask', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            question: q,
+            request: currentRequest,
+            response: currentResponse,
+            gemini_api_key: apiKey || null
+          })
+        });
+        const data = await res.json();
+        renderWhatIfButtons(data.suggested_actions || []);
+        ansEl.innerHTML = `<div style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+            <span class="badge badge-blue">推論エンジン: ${data.engine}</span>
+            <span style="font-size:12px; color:var(--text-muted);">質問: 「${escapeHtml(q)}」</span>
+          </div>` + simpleMarkdownToHtml(data.answer_markdown || '');
+      } catch (err) {
+        ansEl.innerHTML = `<div style="color:#f43f5e;">問い合わせエラー: ${escapeHtml(err.message)}</div>`;
+      }
+    }
+
+    function renderWhatIfButtons(actions) {
+      const el = document.getElementById('qaWhatIfContainer');
+      if (!actions || actions.length === 0) {
+        el.innerHTML = '';
+        return;
+      }
+      let html = `<div style="background:rgba(16, 185, 129, 0.08); border:1px solid rgba(16, 185, 129, 0.35); border-radius:8px; padding:12px 16px;">
+        <div style="font-size:13px; font-weight:700; color:#34d399; margin-bottom:8px;">
+          ⚡ ワンクリック解消シミュレーション（What-If 処方箋を適用して再最適化）
+        </div>
+        <div style="display:flex; flex-wrap:wrap; gap:8px;">`;
+      actions.forEach((act, idx) => {
+        const encoded = encodeURIComponent(JSON.stringify(act));
+        html += `<button class="btn btn-sm btn-emerald" onclick="applyWhatIfAction('${encoded}')" title="${escapeHtml(act.description)}">
+          🔧 処方箋${idx + 1}: ${escapeHtml(act.label)} を適用して再計算
+        </button>`;
+      });
+      html += `</div></div>`;
+      el.innerHTML = html;
+    }
+
+    async function applyWhatIfAction(encodedAct) {
+      const act = JSON.parse(decodeURIComponent(encodedAct));
+      if (!currentRequest) return;
+
+      if (act.action_type === 'increase_line_hours') {
+        const line = (currentRequest.lines || []).find(
+          l => l.location === act.target_location && l.line_id === act.target_id
+        );
+        if (line) {
+          const oldHrs = line.available_hours_per_week || 80;
+          line.available_hours_per_week = act.new_value;
+          if (line.max_capacity && oldHrs > 0) {
+            line.max_capacity = Math.round(line.max_capacity * (act.new_value / oldHrs));
+          }
+        }
+      } else if (act.action_type === 'increase_line_capacity') {
+        const line = (currentRequest.lines || []).find(
+          l => l.location === act.target_location && l.line_id === act.target_id
+        );
+        if (line) {
+          line.max_capacity = act.new_value;
+        }
+      } else if (act.action_type === 'increase_init_inventory') {
+        if (!currentRequest.init_inventory) currentRequest.init_inventory = [];
+        const existing = currentRequest.init_inventory.find(
+          r => r.location === act.target_location && r.sku === act.target_id
+        );
+        if (existing) {
+          existing.qty = act.new_value;
+        } else {
+          currentRequest.init_inventory.push({
+            location: act.target_location,
+            sku: act.target_id,
+            qty: act.new_value
+          });
+        }
+      }
+
+      document.getElementById('requestJsonArea').value = JSON.stringify(currentRequest, null, 2);
+      await runOptimization();
+    }
+
+    function renderRootCauseChains() {
+      const diags = currentResponse.root_causes || [];
+      const el = document.getElementById('rootCauseChainsContainer');
+      if (diags.length === 0) {
+        el.innerHTML = `<div style="color:#34d399; font-weight:600; font-size:13px;">
+          ✅ 現在の計画には欠品や安全在庫割れが存在しないため、異常因果チェーンは 0 件です。
+        </div>`;
+        return;
+      }
+
+      let html = '';
+      diags.forEach((d, idx) => {
+        const isCrit = d.issue_type === 'shortage';
+        html += `<div style="background:#111827; border:1px solid var(--border); border-radius:8px; padding:14px; margin-bottom:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+            <div style="font-weight:700; font-size:14px;">
+              ${isCrit ? '🚨' : '⚠️'} 診断 #${idx + 1}: <code>${d.location}</code> / <code>${d.sku}</code> （${d.week_start}週）
+              — ${isCrit ? `<span style="color:#f43f5e;">欠品 ${d.shortage_qty} 個</span>` : `<span style="color:#fcd34d;">安全在庫不足 ${d.ss_deficit_qty} 個</span>`}
+            </div>
+            <span class="badge ${isCrit ? 'badge-red' : 'badge-amber'}">主因: ${escapeHtml(d.primary_cause)}</span>
+          </div>
+          <div class="causal-chain">`;
+        (d.factors || []).forEach(f => {
+          html += `<div class="causal-step ${isCrit ? 'crit' : 'warn'}">
+            <div style="font-size:11px; color:var(--text-muted); font-weight:600;">
+              Step ${f.step} [${escapeHtml(f.category)}] — 対象: ${escapeHtml(f.location)} / ${escapeHtml(f.target_id)} (${escapeHtml(f.week_start)}週)
+            </div>
+            <div style="margin-top:2px;">${escapeHtml(f.summary)}</div>
+          </div>`;
+        });
+        html += `</div></div>`;
+      });
+      el.innerHTML = html;
+    }
+
+    function escapeHtml(str) {
+      return String(str || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+
+    function simpleMarkdownToHtml(md) {
+      const lines = md.split('\n');
+      let html = '';
+      let inTable = false;
+      let tableRows = [];
+
+      const flushTable = () => {
+        if (!inTable || tableRows.length === 0) return;
+        html += '<div class="table-wrap" style="margin:10px 0;"><table>';
+        tableRows.forEach((row, rIdx) => {
+          if (rIdx === 1 && row.every(c => /^[:\-]+$/.test(c))) return;
+          const tag = rIdx === 0 ? 'th' : 'td';
+          html += '<tr>' + row.map((c, cIdx) => `<${tag} class="${cIdx < 3 ? 'left' : ''}">${formatInlineMd(c)}</${tag}>`).join('') + '</tr>';
+        });
+        html += '</table></div>';
+        inTable = false;
+        tableRows = [];
+      };
+
+      lines.forEach(line => {
+        const trimmed = line.trim();
+        if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+          inTable = true;
+          const cells = trimmed.slice(1, -1).split('|').map(c => c.trim());
+          tableRows.push(cells);
+          return;
+        } else {
+          flushTable();
+        }
+
+        if (trimmed === '---') {
+          html += '<hr/>';
+        } else if (trimmed.startsWith('### ')) {
+          html += `<h3>${formatInlineMd(trimmed.slice(4))}</h3>`;
+        } else if (trimmed.startsWith('#### ')) {
+          html += `<h4>${formatInlineMd(trimmed.slice(5))}</h4>`;
+        } else if (trimmed.startsWith('- ') || trimmed.startsWith('  - ')) {
+          const indent = line.startsWith('  -') ? 'margin-left:20px;' : '';
+          html += `<div style="${indent} margin:3px 0;">• ${formatInlineMd(trimmed.slice(2))}</div>`;
+        } else if (/^\d+\.\s/.test(trimmed)) {
+          html += `<div style="margin:4px 0; font-weight:600;">${formatInlineMd(trimmed)}</div>`;
+        } else if (trimmed.startsWith('> ')) {
+          html += `<div style="background:rgba(59,130,246,0.1); border-left:3px solid #3b82f6; padding:8px 12px; margin:8px 0; border-radius:4px;">${formatInlineMd(trimmed.slice(2))}</div>`;
+        } else if (trimmed.length > 0) {
+          html += `<p style="margin:6px 0;">${formatInlineMd(trimmed)}</p>`;
+        }
+      });
+      flushTable();
+      return html;
+    }
+
+    function formatInlineMd(text) {
+      return escapeHtml(text)
+        .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+        .replace(/`(.+?)`/g, '<code>$1</code>');
+    }
+
+    window.addEventListener('DOMContentLoaded', initApp);
+  </script>
+</body>
+</html>

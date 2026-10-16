@@ -257,6 +257,9 @@ fn test_example_and_template_files_valid() {
     let example_resp = run_optimization(&example_req).expect("Example optimization failed");
     assert_eq!(example_resp.status, "optimal");
     assert!(!example_resp.edits.is_empty());
+    assert!(!example_resp.line_utilizations.is_empty());
+    assert!(!example_resp.transport_flows.is_empty());
+    assert!(!example_resp.sku_psi_details.is_empty());
 
     let template_raw = std::fs::read_to_string("templates/request_template.json")
         .expect("Failed to read templates/request_template.json");
@@ -264,5 +267,112 @@ fn test_example_and_template_files_valid() {
         serde_json::from_str(&template_raw).expect("Failed to parse request_template.json");
     let template_resp = run_optimization(&template_req).expect("Template optimization failed");
     assert_eq!(template_resp.status, "optimal");
+    assert!(!template_resp.line_utilizations.is_empty());
+    assert!(!template_resp.sku_psi_details.is_empty());
 }
+
+#[test]
+fn test_analytics_root_causes_and_natural_language_qa() {
+    let weeks = ["2026-01-05", "2026-01-12", "2026-01-19"];
+    let pairs = [
+        ("PLANT-A", "RAW-1"),
+        ("PLANT-A", "FG-1"),
+        ("DC-EAST", "FG-1"),
+    ];
+    // Demand in 2026-01-19 (250) exceeds 1-week lagged PLANT-A line capacity (150) + init inv (20)
+    let demands = [
+        ("DC-EAST", "FG-1", "2026-01-12", 100.0),
+        ("DC-EAST", "FG-1", "2026-01-19", 250.0),
+    ];
+
+    let req = OptimizeRequestPayload {
+        config: SolverConfig::default(),
+        facts: make_facts(&pairs, &weeks, &demands),
+        lines: vec![ProductionLineRow {
+            location: "PLANT-A".to_string(),
+            line_id: "LINE-FG".to_string(),
+            max_capacity: 150.0,
+            available_hours_per_week: Some(75.0),
+        }],
+        bom: vec![BomRow {
+            target_location: "PLANT-A".to_string(),
+            parent_sku: "FG-1".to_string(),
+            child_sku: "RAW-1".to_string(),
+            quantity: 2.0,
+            line_id: Some("LINE-FG".to_string()),
+            rate_per_hour: Some(2.0),
+            yield_rate: Some(1.0),
+            scrap_rate: Some(0.0),
+        }],
+        init_inventory: vec![InitInventoryRow {
+            location: "DC-EAST".to_string(),
+            sku: "FG-1".to_string(),
+            qty: 20.0,
+        }],
+        transport_routes: vec![TransportRouteRow {
+            from_location: "PLANT-A".to_string(),
+            to_location: "DC-EAST".to_string(),
+            sku: "FG-1".to_string(),
+            transport_lt: Some(1),
+            transport_cost_per_unit: Some(0.5),
+            min_shipping_qty: Some(10),
+            shipping_lot_size: Some(10),
+            quota_pct: None,
+        }],
+        item_locations: vec![
+            ItemLocationRow {
+                location: "PLANT-A".to_string(),
+                sku: "RAW-1".to_string(),
+                can_procure: Some(true),
+                min_procurement_qty: Some(10),
+                purchase_lot_size: Some(10),
+                procurement_unit_cost: Some(1.0),
+                ..Default::default()
+            },
+            ItemLocationRow {
+                location: "PLANT-A".to_string(),
+                sku: "FG-1".to_string(),
+                min_production_qty: Some(10),
+                production_lot_size: Some(10),
+                cost: Some(2.0),
+                ..Default::default()
+            },
+            ItemLocationRow {
+                location: "DC-EAST".to_string(),
+                sku: "FG-1".to_string(),
+                safety_stock_weeks: Some(0.5),
+                price: Some(20.0),
+                ..Default::default()
+            },
+        ],
+        locations: Vec::new(),
+        scheduled_receipts: Vec::new(),
+        backorder_skus: Vec::new(),
+        capacity_overrides: Vec::new(),
+        request_map: Vec::new(),
+        request_kind_map: Vec::new(),
+    };
+
+    let resp = run_optimization(&req).expect("Optimization should succeed");
+    assert_eq!(resp.status, "optimal");
+    assert_eq!(resp.line_utilizations.len(), 3);
+    assert!(!resp.transport_flows.is_empty());
+    assert_eq!(resp.sku_psi_details.len(), 9);
+    assert!(
+        !resp.root_causes.is_empty(),
+        "Expected upstream root causes for shortage"
+    );
+
+    let ask_req = scm_lp_optimizer::schema::AskRequestPayload {
+        question: "なぜ欠品が発生するのか？原因と対策を教えて".to_string(),
+        request: req,
+        response: Some(resp),
+        gemini_api_key: None,
+    };
+    let ask_resp = scm_lp_optimizer::qa::answer_question(&ask_req).expect("QA should succeed");
+    assert!(ask_resp.answer_markdown.contains("DC-EAST"));
+    assert!(ask_resp.answer_markdown.contains("LINE-FG"));
+    assert!(!ask_resp.suggested_actions.is_empty());
+}
+
 

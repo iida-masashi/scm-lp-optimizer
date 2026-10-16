@@ -288,6 +288,117 @@ pub struct PlanEditRow {
     pub order_release_qty: i64,
 }
 
+/// Per-SKU breakdown inside a production line's weekly utilization.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LineSkuBreakdown {
+    pub sku: String,
+    pub production_qty: i64,
+    pub used_hours: f64,
+    pub share_pct: f64,
+}
+
+/// Weekly utilization summary for a production line `(location, line_id, week_start)`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct LineUtilizationRow {
+    pub location: String,
+    pub line_id: String,
+    pub week_start: String,
+    /// `"hours"` when all assigned SKUs define `rate_per_hour` and line has hours > 0, else `"quantity"`.
+    pub capacity_mode: String,
+    pub used_quantity: i64,
+    pub max_capacity_quantity: f64,
+    pub used_hours: f64,
+    pub available_hours: f64,
+    pub utilization_pct: f64,
+    pub is_bottleneck: bool,
+    pub shadow_price: f64,
+    pub sku_breakdown: Vec<LineSkuBreakdown>,
+}
+
+/// Inter-location transport flow for a route `(from_location -> to_location, sku)` in a week.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct TransportFlowRow {
+    pub from_location: String,
+    pub to_location: String,
+    pub sku: String,
+    pub ship_week: String,
+    pub arrival_week: String,
+    pub transport_lt: i64,
+    pub qty: i64,
+    pub unit_cost: f64,
+    pub total_cost: f64,
+}
+
+/// SKU-level weekly PSI (Production, Supply, Inventory) and shortage detail row.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SkuPsiDetailRow {
+    pub location: String,
+    pub sku: String,
+    pub week_start: String,
+    pub opening_inv: f64,
+    pub production_qty: i64,
+    pub production_request: i64,
+    pub transport_in_qty: i64,
+    pub procurement_in_qty: i64,
+    pub order_release_qty: i64,
+    pub scheduled_receipt_qty: f64,
+    pub sales_demand_qty: f64,
+    pub bom_demand_qty: f64,
+    pub transport_out_qty: f64,
+    pub ending_inv: f64,
+    pub safety_stock_target: f64,
+    pub safety_stock_deficit: f64,
+    pub shortage_qty: f64,
+    pub lp_shortage_qty: f64,
+    pub can_produce: bool,
+    pub can_replenish: bool,
+    pub can_procure: bool,
+    pub line_id: Option<String>,
+}
+
+/// Single causal factor in a root-cause chain.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CausalFactor {
+    pub step: usize,
+    pub category: String,
+    pub location: String,
+    pub target_id: String,
+    pub week_start: String,
+    pub summary: String,
+    pub metric_label: String,
+    pub metric_value: f64,
+    pub limit_value: Option<f64>,
+}
+
+/// Actionable What-If prescription to resolve a shortage or bottleneck.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct WhatIfAction {
+    pub action_type: String,
+    pub label: String,
+    pub description: String,
+    pub target_location: String,
+    pub target_id: String,
+    pub week_start: Option<String>,
+    pub recommended_delta: f64,
+    pub new_value: f64,
+}
+
+/// Root-cause diagnostic entry for a shortage, safety-stock violation, or capacity clip.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct RootCauseDiagnostic {
+    pub issue_type: String,
+    pub severity: String,
+    pub location: String,
+    pub sku: String,
+    pub week_start: String,
+    pub shortage_qty: f64,
+    pub ss_deficit_qty: f64,
+    pub primary_cause: String,
+    pub narrative: String,
+    pub factors: Vec<CausalFactor>,
+    pub actions: Vec<WhatIfAction>,
+}
+
 /// Complete output payload from the LP optimization service.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OptimizeResponsePayload {
@@ -296,4 +407,34 @@ pub struct OptimizeResponsePayload {
     pub facts: Vec<FactRow>,
     pub edits: Vec<PlanEditRow>,
     pub bottlenecks: Vec<Bottleneck>,
+    #[serde(default)]
+    pub line_utilizations: Vec<LineUtilizationRow>,
+    #[serde(default)]
+    pub transport_flows: Vec<TransportFlowRow>,
+    #[serde(default)]
+    pub sku_psi_details: Vec<SkuPsiDetailRow>,
+    #[serde(default)]
+    pub root_causes: Vec<RootCauseDiagnostic>,
 }
+
+/// Natural language Q&A request payload (`POST /ask`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AskRequestPayload {
+    pub question: String,
+    pub request: OptimizeRequestPayload,
+    #[serde(default)]
+    pub response: Option<OptimizeResponsePayload>,
+    #[serde(default)]
+    pub gemini_api_key: Option<String>,
+}
+
+/// Natural language Q&A response payload (`POST /ask`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AskResponsePayload {
+    pub engine: String,
+    pub answer_markdown: String,
+    pub matched_diagnostics: Vec<RootCauseDiagnostic>,
+    pub suggested_actions: Vec<WhatIfAction>,
+    pub related_skus: Vec<(String, String)>,
+}
+

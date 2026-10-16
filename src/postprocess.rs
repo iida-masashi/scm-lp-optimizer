@@ -515,12 +515,21 @@ pub fn clip_excess_inventory(
     }
 }
 
-/// Full post-processing pipeline (`solver._extract_results` + `solver._write_back_to_facts`).
-pub fn extract_and_write_back(
+pub struct PostprocessOutput {
+    pub updated_facts: Vec<FactRow>,
+    pub edits: Vec<PlanEditRow>,
+    pub prod_raw: HashMap<PairWeekKey, i64>,
+    pub replen_out: HashMap<PairWeekKey, i64>,
+    pub release_out: HashMap<PairWeekKey, i64>,
+    pub ship_out: HashMap<PairWeekKey, i64>,
+}
+
+/// Full post-processing pipeline returning intermediate clipped maps for analytics.
+pub fn extract_postprocess_output(
     x: &[f64],
     model: &LpModel,
     req: &OptimizeRequestPayload,
-) -> (Vec<FactRow>, Vec<PlanEditRow>) {
+) -> PostprocessOutput {
     let t_len = model.t_len;
     let (mut prod_raw, mut replen_out, release_out) = round_lp_solution(x, model);
 
@@ -621,5 +630,23 @@ pub fn extract_and_write_back(
         }
     }
 
-    (updated_facts, edits)
+    PostprocessOutput {
+        updated_facts,
+        edits,
+        prod_raw,
+        replen_out,
+        release_out,
+        ship_out,
+    }
 }
+
+/// Full post-processing pipeline (`solver._extract_results` + `solver._write_back_to_facts`).
+pub fn extract_and_write_back(
+    x: &[f64],
+    model: &LpModel,
+    req: &OptimizeRequestPayload,
+) -> (Vec<FactRow>, Vec<PlanEditRow>) {
+    let out = extract_postprocess_output(x, model, req);
+    (out.updated_facts, out.edits)
+}
+
