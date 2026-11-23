@@ -5,6 +5,7 @@ pub mod lp_model;
 pub mod postprocess;
 pub mod qa;
 pub mod schema;
+pub mod milp;
 pub mod solver_clarabel;
 
 use std::time::Instant;
@@ -44,14 +45,30 @@ pub fn run_optimization(
         });
     };
 
-    let mut formulated = formulate_lp(&model, &req.config);
-    let solve_res = match solve_lp_clarabel(&formulated) {
+    let use_milp = req.config.solver.eq_ignore_ascii_case("milp");
+    let lp0 = formulate_lp(&model, &req.config);
+    let mut milp_form = if use_milp { Some(crate::milp::formulate_milp(&model, lp0.clone())) } else { None };
+    let mut formulated = match &milp_form {
+        Some(m) => m.lp.clone(),
+        None => lp0,
+    };
+    let run = |f: &FormulatedLp, m: &Option<crate::milp::MilpFormulation>| match m {
+        Some(m) => crate::milp::solve_milp(&crate::milp::MilpFormulation {
+            lp: f.clone(),
+            integer_cols: m.integer_cols.clone(),
+        }),
+        None => solve_lp_clarabel(f),
+    };
+    let solve_res = match run(&formulated, &milp_form) {
         Ok(r) => r,
         // Infeasible with firmed cells: relax them to `[0, qty]` with a large reward and retry.
         Err(OptimizerError::SolverError { status: 2, .. }) if model.has_firm_cells => {
             model.relax_firm = true;
             apply_relax_firm(&model, &req.config, &mut formulated);
-            solve_lp_clarabel(&formulated)?
+            if let Some(m) = milp_form.as_mut() {
+                m.lp = formulated.clone();
+            }
+            run(&formulated, &milp_form)?
         }
         Err(e) => return Err(e),
     };

@@ -806,6 +806,10 @@ pub struct FormulatedLp {
     pub ub_rows: Vec<SparseRow>,
     /// First column of the alternate-line `PA` block (`alt_line_edges.len() * t_len` columns).
     pub pa_base: Option<usize>,
+    /// `(location, line, week) -> index into ub_rows` of the line capacity row (used by the MILP setup-time term).
+    pub line_row_idx: HashMap<(String, String, usize), usize>,
+    /// `(location, line) -> (time_based, line_hours, max_qty_capacity)`.
+    pub line_mode: HashMap<(String, String), (bool, f64, f64)>,
 }
 
 /// openSCM `_highs_apply_relax_firm`: patch an already formulated (strict) LP in place so that
@@ -1449,6 +1453,15 @@ pub fn formulate_lp(model: &LpModel, cfg: &SolverConfig) -> FormulatedLp {
         num_vars += n_d;
     }
 
+    let line_mode: HashMap<(String, String), (bool, f64, f64)> = line_time_based
+        .iter()
+        .map(|(k, &tb)| {
+            let hours = model.lookups.line_hours.get(k).copied().unwrap_or(0.0);
+            let max_cap = model.lookups.line_capacity.get(k).copied().unwrap_or(0.0);
+            (k.clone(), (tb, hours, max_cap))
+        })
+        .collect();
+
     FormulatedLp {
         num_vars,
         c,
@@ -1456,5 +1469,7 @@ pub fn formulate_lp(model: &LpModel, cfg: &SolverConfig) -> FormulatedLp {
         eq_rows,
         ub_rows,
         pa_base,
+        line_row_idx,
+        line_mode,
     }
 }

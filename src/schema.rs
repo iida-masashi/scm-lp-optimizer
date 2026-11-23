@@ -52,8 +52,13 @@ pub struct SolverConfig {
     /// Network-Design `TR` edges so the LP can choose / split among them (openSCM `dynamic_sourcing`).
     #[serde(default)]
     pub dynamic_sourcing: bool,
+    /// `"lp"` (default, Clarabel interior point, duals) or `"milp"` (microlp branch & bound with
+    /// lot-size integers and setup binaries).
+    #[serde(default = "default_solver")]
+    pub solver: String,
 }
 
+fn default_solver() -> String { "lp".to_string() }
 fn default_holding_cost() -> f64 { 1.0 }
 fn default_shortage_penalty() -> f64 { 1000.0 }
 fn default_procurement_cost() -> f64 { 0.1 }
@@ -83,6 +88,7 @@ impl Default for SolverConfig {
             ss_penalty_cost_ratio: default_ss_penalty_cost_ratio(),
             terminal_inventory_value_ratio: default_terminal_inventory_value_ratio(),
             dynamic_sourcing: false,
+            solver: default_solver(),
         }
     }
 }
