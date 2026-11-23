@@ -209,9 +209,18 @@
 
 ## MILP バックエンド（`config.solver = "milp"`）
 
-- `solver`: `"lp"`（既定。Clarabel、双対値あり）または `"milp"`（HiGHS 分枝限定法）。
+- `solver`: `"lp"`（既定。Clarabel、双対値あり）、`"highs"`（HiGHS 単体法 LP。openSCM と同じ頂点解、双対値あり）、`"milp"`（HiGHS 分枝限定法）。
 - `milp_time_limit_secs`（既定 60）: HiGHS の時間制限。時間内の最良解を返す。
 - `milp_relative_gap`（既定 0.005）: 相対ギャップ。
 - ロット整数 `Z`（`production_lot_size` / `shipping_lot_size` / `purchase_lot_size`）、最小バッチ・セットアップの binary `Y`（`min_*_qty` / `setup_cost` / `setup_time_hours`）を追加する。確定セルには付けない。
 - MILP には双対値が無いため、`bottlenecks` はほぼ満杯の行を `marginal_value = 1.0` で返す。
 - ビルドには cmake・C++ コンパイラ（MinGW）・libclang が必要（`highs-sys`）。Windows(gnu) では実行時に `libstdc++-6.dll` / `libgcc_s_seh-1.dll` / `libwinpthread-1.dll` を実行ファイルと同じフォルダに置く。
+
+## BOM 有効期間（`bom[].valid_from` / `valid_to`）
+
+- ISO 日付（`YYYY-MM-DD`、両端含む）。省略した側は無期限。
+- 親の完成週 `tp` に対し、着手週 `weeks[max(0, tp - production_lt)]` が範囲内の行だけを有効とする（在庫収支・需要伝播・供給原価・後処理の全てで同じ判定）。
+
+## 確定セルと後処理
+
+- 確定セル（`is_fixed` / フェンス内 / 確定購買）は輸送クリップ・BOM 親生産クリップ・過剰在庫クリップのいずれでも削らない。確定した引当が供給を超える場合は `firm_draw_exceeds_supply` 警告を返す。

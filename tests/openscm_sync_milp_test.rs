@@ -1,3 +1,4 @@
+#![cfg(feature = "highs")]
 //! MILP backend (`config.solver = "milp"`): lot-size integers, minimum batch and setup cost.
 
 use std::collections::HashMap;

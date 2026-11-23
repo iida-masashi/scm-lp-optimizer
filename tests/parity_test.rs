@@ -1,3 +1,4 @@
+#![cfg(feature = "highs")]
 //! Numeric parity with openSCM: each fixture in `tests/parity/` holds a request and the plan openSCM
 //! (HiGHS) produced on the same inputs (regenerate with `tests/parity/gen_parity.py`). The Rust
 //! optimizer, solved with `solver = "highs"` / `"milp"`, must reproduce production and replenishment

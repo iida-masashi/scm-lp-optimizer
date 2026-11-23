@@ -19,10 +19,16 @@ path = "src/bin/cli.rs"
 
 [dependencies]
 clarabel = "0.9"
-highs = "1"
+highs = { version = "1", optional = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 chrono = { version = "0.4", default-features = false, features = ["std", "serde"] }
 axum = "0.7"
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "net", "signal"] }
 thiserror = "1.0"
+
+[features]
+# `highs` adds the HiGHS backends (`solver = "highs"` / `"milp"`). It needs CMake, a C++ compiler and
+# libclang at build time; build with `--no-default-features` for the pure-Rust Clarabel-only binary.
+default = ["highs"]
+highs = ["dep:highs"]

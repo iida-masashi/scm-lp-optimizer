@@ -261,7 +261,17 @@ fn merge_terms(terms: &[(usize, f64)]) -> Vec<(usize, f64)> {
     out
 }
 
+#[cfg(not(feature = "highs"))]
+pub fn solve_milp(_mf: &MilpFormulation, _time_limit_secs: f64, _rel_gap: f64) -> Result<ClarabelSolveResult, OptimizerError> {
+    Err(OptimizerError::SolverError {
+        message: "このビルドには HiGHS が含まれていません（`highs` feature を有効にして再ビルドするか、solver=\"lp\" を使用してください）。".to_string(),
+        status: 5,
+        solver_message: "highs feature disabled".to_string(),
+    })
+}
+
 /// Solve with HiGHS (branch & cut). `time_limit_secs` bounds the search; the incumbent is returned.
+#[cfg(feature = "highs")]
 pub fn solve_milp(mf: &MilpFormulation, time_limit_secs: f64, rel_gap: f64) -> Result<ClarabelSolveResult, OptimizerError> {
     use highs::{HighsModelStatus, RowProblem, Sense};
 
