@@ -52,12 +52,20 @@ pub struct SolverConfig {
     /// Network-Design `TR` edges so the LP can choose / split among them (openSCM `dynamic_sourcing`).
     #[serde(default)]
     pub dynamic_sourcing: bool,
-    /// `"lp"` (default, Clarabel interior point, duals) or `"milp"` (microlp branch & bound with
+    /// `"lp"` (default, Clarabel interior point, duals) or `"milp"` (HiGHS branch & cut with
     /// lot-size integers and setup binaries).
     #[serde(default = "default_solver")]
     pub solver: String,
+    /// MILP wall-clock limit in seconds (HiGHS `time_limit`; best incumbent is returned).
+    #[serde(default = "default_milp_time_limit")]
+    pub milp_time_limit_secs: f64,
+    /// MILP relative MIP gap (HiGHS `mip_rel_gap`).
+    #[serde(default = "default_milp_gap")]
+    pub milp_relative_gap: f64,
 }
 
+fn default_milp_time_limit() -> f64 { 60.0 }
+fn default_milp_gap() -> f64 { 0.005 }
 fn default_solver() -> String { "lp".to_string() }
 fn default_holding_cost() -> f64 { 1.0 }
 fn default_shortage_penalty() -> f64 { 1000.0 }
@@ -89,6 +97,8 @@ impl Default for SolverConfig {
             terminal_inventory_value_ratio: default_terminal_inventory_value_ratio(),
             dynamic_sourcing: false,
             solver: default_solver(),
+            milp_time_limit_secs: default_milp_time_limit(),
+            milp_relative_gap: default_milp_gap(),
         }
     }
 }

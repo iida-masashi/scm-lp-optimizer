@@ -56,7 +56,7 @@ pub fn run_optimization(
         Some(m) => crate::milp::solve_milp(&crate::milp::MilpFormulation {
             lp: f.clone(),
             integer_cols: m.integer_cols.clone(),
-        }),
+        }, req.config.milp_time_limit_secs, req.config.milp_relative_gap),
         None => solve_lp_clarabel(f),
     };
     let solve_res = match run(&formulated, &milp_form) {

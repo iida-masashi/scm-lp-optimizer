@@ -206,3 +206,12 @@
 
 **既存入力への影響**: `holding_cost_rate` は年率（週次係数は rate/52）。BOM 係数に親の歩留まりを反映（1 超は 1 とみなす）。拠点能力の行は、未割当の生産ペアがある拠点の全生産ペアを対象にする。計画行が無い供給元はゴーストペアとして扱う。
 
+
+## MILP バックエンド（`config.solver = "milp"`）
+
+- `solver`: `"lp"`（既定。Clarabel、双対値あり）または `"milp"`（HiGHS 分枝限定法）。
+- `milp_time_limit_secs`（既定 60）: HiGHS の時間制限。時間内の最良解を返す。
+- `milp_relative_gap`（既定 0.005）: 相対ギャップ。
+- ロット整数 `Z`（`production_lot_size` / `shipping_lot_size` / `purchase_lot_size`）、最小バッチ・セットアップの binary `Y`（`min_*_qty` / `setup_cost` / `setup_time_hours`）を追加する。確定セルには付けない。
+- MILP には双対値が無いため、`bottlenecks` はほぼ満杯の行を `marginal_value = 1.0` で返す。
+- ビルドには cmake・C++ コンパイラ（MinGW）・libclang が必要（`highs-sys`）。Windows(gnu) では実行時に `libstdc++-6.dll` / `libgcc_s_seh-1.dll` / `libwinpthread-1.dll` を実行ファイルと同じフォルダに置く。

@@ -4,12 +4,10 @@
 //!   * `Z` integer lot-count variables (`P = lot * Z`) for production / shipping / procurement lots,
 //!   * `Y` binary setup / minimum-batch variables (`P <= M*Y`, `P >= min*Y`), with `setup_cost`
 //!     charged in the objective and `setup_time_hours` consuming line capacity,
-//! and solved with the pure-Rust `microlp` branch-and-bound solver. Duals do not exist for a MILP,
+//! and solved with HiGHS (`highs` crate, branch & cut). Duals do not exist for a MILP,
 //! so bottlenecks are reported as binding rows with marginal value 1.0 (same as openSCM).
 
 use std::collections::{HashMap, HashSet};
-
-use microlp::{ComparisonOp, OptimizationDirection, Problem};
 
 use crate::graph::supplier_to_consumer_order;
 use crate::lp_model::{
@@ -261,62 +259,67 @@ fn merge_terms(terms: &[(usize, f64)]) -> Vec<(usize, f64)> {
     out
 }
 
-/// Solve with microlp (branch & bound over the integer / binary columns).
-pub fn solve_milp(mf: &MilpFormulation) -> Result<ClarabelSolveResult, OptimizerError> {
+/// Solve with HiGHS (branch & cut). `time_limit_secs` bounds the search; the incumbent is returned.
+pub fn solve_milp(mf: &MilpFormulation, time_limit_secs: f64, rel_gap: f64) -> Result<ClarabelSolveResult, OptimizerError> {
+    use highs::{HighsModelStatus, RowProblem, Sense};
+
     let lp = &mf.lp;
     let n = lp.num_vars;
     if n == 0 {
         return Ok(ClarabelSolveResult { x: Vec::new(), bottlenecks: Vec::new() });
     }
     let int_set: HashSet<usize> = mf.integer_cols.iter().copied().collect();
-    let mut prob = Problem::new(OptimizationDirection::Minimize);
-    let mut vars = Vec::with_capacity(n);
+    let mut pb = RowProblem::default();
+    let mut cols = Vec::with_capacity(n);
     for j in 0..n {
         let (lo, hi) = lp.bounds[j];
-        let v = if int_set.contains(&j) {
-            let lo_i = lo.ceil().max(-1.0e9) as i32;
-            let hi_i = if hi.is_finite() { hi.floor().min(1.0e9) as i32 } else { 1_000_000_000 };
-            prob.add_integer_var(lp.c[j], (lo_i, hi_i))
+        let col = if int_set.contains(&j) {
+            pb.add_integer_column(lp.c[j], lo..hi)
         } else {
-            prob.add_var(lp.c[j], (lo, hi))
+            pb.add_column(lp.c[j], lo..hi)
         };
-        vars.push(v);
+        cols.push(col);
     }
     for row in &lp.eq_rows {
-        let t: Vec<_> = merge_terms(&row.terms).into_iter().map(|(j, v)| (vars[j], v)).collect();
-        prob.add_constraint(&t, ComparisonOp::Eq, row.rhs);
+        let t: Vec<_> = merge_terms(&row.terms).into_iter().map(|(j, v)| (cols[j], v)).collect();
+        pb.add_row(row.rhs..=row.rhs, t);
     }
     for row in &lp.ub_rows {
-        let t: Vec<_> = merge_terms(&row.terms).into_iter().map(|(j, v)| (vars[j], v)).collect();
-        prob.add_constraint(&t, ComparisonOp::Le, row.rhs);
+        let t: Vec<_> = merge_terms(&row.terms).into_iter().map(|(j, v)| (cols[j], v)).collect();
+        pb.add_row(..=row.rhs, t);
     }
 
-    let sol = match prob.solve() {
-        Ok(s) => s,
-        Err(microlp::Error::Infeasible) => {
+    let mut model = pb.optimise(Sense::Minimise);
+    model.set_option("output_flag", false);
+    model.set_option("time_limit", time_limit_secs);
+    model.set_option("mip_rel_gap", rel_gap);
+    let solved = model.solve();
+    let status = solved.status();
+    match status {
+        HighsModelStatus::Infeasible => {
             return Err(OptimizerError::SolverError {
                 message: "制約条件を同時に満たす実行可能解が存在しません（ロット・Capacity / Fence / 初期在庫の矛盾を確認してください）。".to_string(),
                 status: 2,
-                solver_message: "microlp Infeasible".to_string(),
+                solver_message: format!("HiGHS {status:?}"),
             })
         }
-        Err(microlp::Error::Unbounded) => {
+        HighsModelStatus::Unbounded | HighsModelStatus::UnboundedOrInfeasible => {
             return Err(OptimizerError::SolverError {
-                message: "目的関数が非有界（Unbounded）です。コスト設定を確認してください。".to_string(),
+                message: "目的関数が非有界（Unbounded）または実行不能です。コスト設定を確認してください。".to_string(),
                 status: 3,
-                solver_message: "microlp Unbounded".to_string(),
+                solver_message: format!("HiGHS {status:?}"),
             })
         }
-        Err(e) => {
-            return Err(OptimizerError::SolverError {
-                message: "MILP ソルバーが失敗しました。".to_string(),
-                status: 4,
-                solver_message: format!("{e:?}"),
-            })
-        }
-    };
-
-    let mut x: Vec<f64> = vars.iter().map(|&v| sol[v]).collect();
+        _ => {}
+    }
+    let mut x: Vec<f64> = solved.get_solution().columns().to_vec();
+    if x.len() != n {
+        return Err(OptimizerError::SolverError {
+            message: format!("MILP が解を返しませんでした（{status:?}）。時間制限内に実行可能解が見つからなかった可能性があります。"),
+            status: 4,
+            solver_message: format!("HiGHS {status:?}"),
+        });
+    }
     for &j in &mf.integer_cols {
         x[j] = x[j].round();
     }
