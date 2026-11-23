@@ -41,6 +41,17 @@ pub struct SolverConfig {
     /// - `"glop"`: uses direct `transport_consumers` multiplier coefficients on `R` variables.
     #[serde(default = "default_formulation_mode")]
     pub formulation_mode: String,
+    /// SS violation penalty is raised to `min(k * v, 0.5 * shortage_cost)` where `v` is the
+    /// supply unit cost (`SS_PENALTY_COST_RATIO`, openSCM sync).
+    #[serde(default = "default_ss_penalty_cost_ratio")]
+    pub ss_penalty_cost_ratio: f64,
+    /// Terminal inventory valued at `kappa * v` (`TERMINAL_INVENTORY_VALUE_RATIO`, clamped to [0, 0.99]).
+    #[serde(default = "default_terminal_inventory_value_ratio")]
+    pub terminal_inventory_value_ratio: f64,
+    /// When true, destinations with >= 2 un-quota'd inbound routes keep ALL routes as
+    /// Network-Design `TR` edges so the LP can choose / split among them (openSCM `dynamic_sourcing`).
+    #[serde(default)]
+    pub dynamic_sourcing: bool,
 }
 
 fn default_holding_cost() -> f64 { 1.0 }
@@ -51,6 +62,8 @@ fn default_replenishment_cost() -> f64 { 2.0 }
 fn default_ss_violation_penalty() -> f64 { 100.0 }
 fn default_backlog_penalty_per_week() -> f64 { 50.0 }
 fn default_plan_stability_lambda() -> f64 { 0.0 }
+fn default_ss_penalty_cost_ratio() -> f64 { 1.0 }
+fn default_terminal_inventory_value_ratio() -> f64 { 0.95 }
 fn default_formulation_mode() -> String { "scipy".to_string() }
 
 impl Default for SolverConfig {
@@ -67,6 +80,9 @@ impl Default for SolverConfig {
             profit_maximization: false,
             terminal_lookback_weeks: None,
             formulation_mode: default_formulation_mode(),
+            ss_penalty_cost_ratio: default_ss_penalty_cost_ratio(),
+            terminal_inventory_value_ratio: default_terminal_inventory_value_ratio(),
+            dynamic_sourcing: false,
         }
     }
 }
@@ -74,6 +90,9 @@ impl Default for SolverConfig {
 /// Weekly fact row for a (location, sku, week_start) cell.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct FactRow {
+    /// Firmed bucket (`facts_weekly.is_fixed`): P/R are pinned to the committed plan values.
+    #[serde(default)]
+    pub is_fixed: bool,
     pub location: String,
     pub sku: String,
     pub week_start: String,
@@ -180,6 +199,18 @@ pub struct ItemLocationRow {
     pub cost: Option<f64>,
     #[serde(default)]
     pub procurement_unit_cost: Option<f64>,
+    /// Variable manufacturing cost added to the production coefficient (`variable_manufacturing_cost`).
+    #[serde(default)]
+    pub variable_manufacturing_cost: Option<f64>,
+    /// MILP fixed setup cost per production run.
+    #[serde(default)]
+    pub setup_cost: Option<f64>,
+    /// MILP setup time (hours) consumed on the line per production run.
+    #[serde(default)]
+    pub setup_time_hours: Option<f64>,
+    /// Lots that expire within this many weeks are treated as already expired (FEFO).
+    #[serde(default)]
+    pub min_remaining_shelf_life_weeks: Option<i64>,
 }
 
 /// Location master (`master_locations`).
@@ -192,6 +223,60 @@ pub struct LocationRow {
     pub holding_cost_rate: Option<f64>,
     #[serde(default)]
     pub max_storage_capacity: Option<f64>,
+    /// Lower value = higher allocation priority; raises the shortage penalty by up to 5% per rank.
+    #[serde(default)]
+    pub allocation_priority: Option<i64>,
+    /// Storage capacity unit; `None` / `"BASE"` means the SKU base unit.
+    #[serde(default)]
+    pub storage_capacity_uom: Option<String>,
+}
+
+/// Alternate production line eligibility (`master_line_eligibility`).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LineEligibilityRow {
+    pub location: String,
+    pub sku: String,
+    pub line_id: String,
+    #[serde(default)]
+    pub efficiency_rate: Option<f64>,
+}
+
+/// SKU unit-of-measure conversion: `1 storage_uom = factor base units`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UomFactorRow {
+    pub sku: String,
+    pub uom: String,
+    pub factor: f64,
+}
+
+/// Initial inventory lot with an expiry week (FEFO expiry projection).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InitLotRow {
+    pub location: String,
+    pub sku: String,
+    pub qty: f64,
+    #[serde(default)]
+    pub expiry_week: Option<String>,
+}
+
+/// Non-fatal model warning (`code` mirrors openSCM warning codes).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ModelWarning {
+    pub code: String,
+    pub location: Option<String>,
+    pub sku: Option<String>,
+    pub week: Option<String>,
+    pub message: String,
+}
+
+/// Alternate-line spillover quantity (`PA` variable) for `(location, sku, alt_line, week)`.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AltLineUsageRow {
+    pub location: String,
+    pub sku: String,
+    pub alt_line: String,
+    pub week_start: String,
+    pub qty: f64,
 }
 
 /// Initial inventory balance per `(location, sku)`.
@@ -266,6 +351,12 @@ pub struct OptimizeRequestPayload {
     pub request_map: Vec<RequestMapEntry>,
     #[serde(default)]
     pub request_kind_map: Vec<RequestKindEntry>,
+    #[serde(default)]
+    pub line_eligibility: Vec<LineEligibilityRow>,
+    #[serde(default)]
+    pub uom_factors: Vec<UomFactorRow>,
+    #[serde(default)]
+    pub init_lots: Vec<InitLotRow>,
 }
 
 /// Dual-value capacity / storage bottleneck reported by the LP solver.
@@ -415,6 +506,10 @@ pub struct OptimizeResponsePayload {
     pub sku_psi_details: Vec<SkuPsiDetailRow>,
     #[serde(default)]
     pub root_causes: Vec<RootCauseDiagnostic>,
+    #[serde(default)]
+    pub warnings: Vec<ModelWarning>,
+    #[serde(default)]
+    pub alt_line_usage: Vec<AltLineUsageRow>,
 }
 
 /// Natural language Q&A request payload (`POST /ask`).

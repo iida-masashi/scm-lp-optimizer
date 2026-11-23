@@ -22,6 +22,7 @@ fn make_facts(
                 }
             }
             out.push(FactRow {
+                is_fixed: false,
                 location: loc.to_string(),
                 sku: sku.to_string(),
                 week_start: w.to_string(),
@@ -122,12 +123,16 @@ fn test_two_echelon_bom_and_transport_lp() {
                 holding_cost: Some(0.5),
                 holding_cost_rate: None,
                 max_storage_capacity: Some(2000.0),
+                allocation_priority: None,
+            storage_capacity_uom: None,
             },
             LocationRow {
                 location: "DC-EAST".to_string(),
                 holding_cost: Some(0.5),
                 holding_cost_rate: None,
                 max_storage_capacity: Some(1000.0),
+                allocation_priority: None,
+            storage_capacity_uom: None,
             },
         ],
         scheduled_receipts: vec![ScheduledReceiptRow {
@@ -140,6 +145,9 @@ fn test_two_echelon_bom_and_transport_lp() {
         capacity_overrides: Vec::new(),
         request_map: Vec::new(),
         request_kind_map: Vec::new(),
+        line_eligibility: Vec::new(),
+        uom_factors: Vec::new(),
+        init_lots: Vec::new(),
     };
 
     let resp = run_optimization(&req).expect("Optimization should succeed");
@@ -217,6 +225,9 @@ fn test_capacity_bottleneck_shadow_price() {
         }],
         request_map: Vec::new(),
         request_kind_map: Vec::new(),
+        line_eligibility: Vec::new(),
+        uom_factors: Vec::new(),
+        init_lots: Vec::new(),
     };
 
     let resp = run_optimization(&req).expect("Optimization should succeed");
@@ -351,6 +362,9 @@ fn test_analytics_root_causes_and_natural_language_qa() {
         capacity_overrides: Vec::new(),
         request_map: Vec::new(),
         request_kind_map: Vec::new(),
+        line_eligibility: Vec::new(),
+        uom_factors: Vec::new(),
+        init_lots: Vec::new(),
     };
 
     let resp = run_optimization(&req).expect("Optimization should succeed");

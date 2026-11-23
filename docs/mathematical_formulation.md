@@ -65,9 +65,9 @@ $$\min \sum_{p=0}^{N-1} \sum_{t=0}^{T-1} \left( c^P_{p, t} P_{p, t} + c^R_{p, t}
 
 各係数の決定ルールは以下の通りです：
 - **在庫保管コスト $c^I_{p, t}$**:
-  - 拠点に原価比例保管費率 `holding_cost_rate` ($r^{\text{hold}}_{\text{loc}}$) があり、品目に原価 `cost` ($\text{cost}_p$) がある場合は $r^{\text{hold}}_{\text{loc}} \times \text{cost}_p$。
+  - 拠点に原価比例保管費率 `holding_cost_rate`（**年率**）があり、品目に原価 `cost` がある場合は $(r^{\text{hold}}_{\text{loc}} / 52) \times \text{cost}_p$（週次換算）。
   - それ以外は拠点の `holding_cost`、未指定時は `config.holding_cost`（デフォルト `1.0`）。
-- **生産コスト $c^P_{p, t}$**: 品目原価 `item_locations.cost`、未指定時は `config.production_cost`（デフォルト `5.0`）。
+- **生産コスト $c^P_{p, t}$**: **付加価値**（品目原価 − 子部品原価合計。子部品係数は `quantity/(1−scrap)/yield`、子の原価は `cost` → `procurement_unit_cost`、負値は 0）に `variable_manufacturing_cost` を加算。BOM を持たない品目は `item_locations.cost`、未指定時は `config.production_cost`（デフォルト `5.0`）。
 - **外部調達コスト $c^E_{p, t}$**: `item_locations.procurement_unit_cost` ➔ `item_locations.cost` ➔ `config.procurement_cost`（デフォルト `0.1`）の優先順。
 - **輸送補充コスト $c^R_{p, t}$ / $c^{\text{tr}}_e$**: ルートの `transport_cost_per_unit`、未指定時は `config.replenishment_cost`（デフォルト `2.0`）。
 - **品切れペナルティ $c^U_{p, t}$**:
@@ -138,3 +138,24 @@ Clarabel の主双対内点法により得られた双対変数（Dual Variables
    - 上流拠点での能力クリッピング等の結果、上流から出荷可能な実在庫よりも下流の計画補充量 $R$ が大きくなった場合、トポロジカル順序（上流 ➔ 下流）で実際に供給可能な数量以下に下流の入荷量をクリップします。
 4. **L-10 過剰在庫クリッピング (`clip_excess_inventory`)**:
    - ロット丸め等の影響で期末在庫が安全在庫ターゲットの一定倍率（`excess_inventory_buffer_ratio`、デフォルト `1.2` 倍）を超える場合、欠品を起こさない範囲で生産ロットを1ロットずつ削減します。
+
+---
+
+## 8. openSCM 同期で追加された目的関数項（2026-11 時点）
+
+- **供給単位コスト $v_p$**: 供給側から順に、製造（付加価値コスト＋子部品の $v$ の BOM 係数和）／拠点間補充（$\sum \text{mult}\cdot(c_{\text{route}}+v_{\text{src}})$）／購買の最小値。
+- **終端在庫評価**: 最終週の在庫係数を $c^I - \kappa v_p$ とする（`terminal_inventory_value_ratio` = $\kappa$、既定 0.95、[0, 0.99] にクランプ）。
+- **安全在庫割れペナルティ**: $v_p>0$ のとき $\max(c^{SS},\ \min(k\,v_p,\ 0.5\,c^U))$（`ss_penalty_cost_ratio` = $k$、既定 1.0）。
+- **拠点の `allocation_priority`**: 欠品コストを $1+0.05\cdot\max(0,\ \text{max\_prio}-\text{prio}+1)$ 倍する。
+- **輸送補充コスト**: 着地ごとの $\sum \text{mult}\cdot\text{route\_unit\_cost}$（正の単価、なければ `replenishment_cost`）。
+- **BOM 係数**: $\text{quantity}/(1-\text{scrap})/\text{yield}$（yield は親品目の歩留まり）。
+
+### 8.1 データ駆動で有効になる制約・変数
+
+- **代替ライン（`line_eligibility`）**: 品目 $p$ の主ライン超過分を代替ライン $l'$ へ逃がす変数 $PA_{e,t}\ge 0$。$PA_{e,t}\le P_{p,t}$、主ラインの消費は $P-\sum PA$、代替ラインの消費は $PA/\text{eff}$（時間ベースのラインは $1/(r\,\eta\,\text{eff})$）。目的関数の追加コストは $\max(0.01,\ c_{alt}-c_{base})$、$c_{alt}=c_{base}/\text{eff}+0.01\cdot\text{rank}$。内訳は応答の `alt_line_usage`（計画列には保存されない）。
+- **確定セル（`is_fixed` またはフェンス内）**: $P,R$ を確定数量に固定。確定購買（`order_release_qty` 由来）は $E_{t-LT}$ を固定し、$R$ の固定量は $\max(0, R^{firm}-A)$。実行不能のときは確定セルを $[0, qty]$ に緩め、目的関数に $-10\cdot\max(\text{shortage})$ の報酬を付けて再求解し、`firm_qty_not_feasible` の警告を返す。出力では確定数量を復元する。
+- **期首ロット失効（`init_lots`）**: FEFO で需要を消費したときの週別失効見込み量を、在庫バランスの右辺に加算（`min_remaining_shelf_life_weeks` で前倒し）。
+- **保管能力の UOM 換算**: 保管上限の係数を $1/\text{factor}$（`storage_capacity_uom` と `uom_factors`）。
+- **ゴーストペア**: 計画行が無い供給元を、期首在庫と入荷予定だけを持つノードとして追加（`supplier_pair_missing_in_facts`）。
+- **動的ソーシング（`config.dynamic_sourcing`）**: クォータ指定のない着地の全ルートを `TR` 変数にして、LP が経路を選ぶ。
+- **拠点能力行**: 未割当の生産ペアが1つでもある拠点では、その拠点の全生産ペアの合計を拠点能力で制約する。

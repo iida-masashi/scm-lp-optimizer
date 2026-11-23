@@ -2,7 +2,7 @@ use crate::graph::supplier_to_consumer_order;
 use crate::lookups::apply_lot_sizing;
 use crate::lp_model::{var_idx, LpModel, SLOT_E, SLOT_I, SLOT_P, SLOT_R};
 use crate::schema::{FactRow, OptimizeRequestPayload, PlanEditRow};
-use std::collections::HashMap;
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 pub type PairWeekKey = (usize, usize);
 
@@ -67,177 +67,227 @@ pub fn round_lp_solution(
 }
 
 /// Clip rounded production DOWN to respect per-line / per-location capacity (`solver_base._clip_by_capacity`).
+///
+/// Mirrors openSCM: firmed (protected) cells keep their quantity and consume capacity first,
+/// and alternate-line spillover (`line_eligibility`) may absorb the rest of a SKU's production.
 pub fn clip_by_capacity(prod_raw: &mut HashMap<PairWeekKey, i64>, model: &LpModel) {
     let t_len = model.t_len;
-    let mut line_order: Vec<(String, String)> = Vec::new();
-    let mut line_pairs: HashMap<(String, String), Vec<usize>> = HashMap::new();
-    let mut loc_order: Vec<String> = Vec::new();
-    let mut loc_pairs: HashMap<String, Vec<usize>> = HashMap::new();
+    let mut line_pairs: BTreeMap<(String, String), Vec<usize>> = BTreeMap::new();
+    let mut loc_producible: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+    let mut loc_has_unassigned: BTreeSet<String> = BTreeSet::new();
 
     for (p, pair) in model.all_pairs.iter().enumerate() {
         if !pair.can_produce {
             continue;
         }
         let key = (pair.location.clone(), pair.sku.clone());
+        loc_producible.entry(pair.location.clone()).or_default().push(p);
         if let Some(line) = model.lookups.sku_to_line.get(&key) {
-            let lk = (pair.location.clone(), line.clone());
-            if !line_pairs.contains_key(&lk) {
-                line_order.push(lk.clone());
-            }
-            line_pairs.entry(lk).or_default().push(p);
-        } else if model.lookups.location_capacity.contains_key(&pair.location) {
-            if !loc_pairs.contains_key(&pair.location) {
-                loc_order.push(pair.location.clone());
-            }
-            loc_pairs.entry(pair.location.clone()).or_default().push(p);
+            line_pairs
+                .entry((pair.location.clone(), line.clone()))
+                .or_default()
+                .push(p);
+        } else {
+            loc_has_unassigned.insert(pair.location.clone());
         }
     }
 
-    let clip_group = |prod_raw: &mut HashMap<PairWeekKey, i64>,
-                      pairs: &[usize],
-                      cap_for_t: &dyn Fn(usize) -> i64| {
-        for t in 0..t_len {
-            let cap_w = cap_for_t(t);
-            let total: i64 = pairs
-                .iter()
-                .map(|&p| *prod_raw.get(&(p, t)).unwrap_or(&0))
-                .sum();
-            if total <= cap_w {
+    let margin = |p: usize| -> f64 {
+        let k = (model.all_pairs[p].location.clone(), model.all_pairs[p].sku.clone());
+        *model.lookups.margin_map.get(&k).unwrap_or(&0.0)
+    };
+    let lot_info = |p: usize| -> (i64, i64) {
+        let k = (model.all_pairs[p].location.clone(), model.all_pairs[p].sku.clone());
+        let (moq, lot_raw) = *model.lookups.production_lot_map.get(&k).unwrap_or(&(0, 1));
+        (moq, lot_raw.max(1))
+    };
+    let elig = |p: usize| -> Option<&Vec<(String, f64)>> {
+        let k = (model.all_pairs[p].location.clone(), model.all_pairs[p].sku.clone());
+        model.lookups.line_eligibility_map.get(&k)
+    };
+    let sort_pairs = |prod_raw: &HashMap<PairWeekKey, i64>, pairs: &[usize], t: usize| -> Vec<usize> {
+        let mut ordered: Vec<usize> = pairs.to_vec();
+        ordered.sort_by(|&pa, &pb| {
+            let qa = *prod_raw.get(&(pa, t)).unwrap_or(&0);
+            let qb = *prod_raw.get(&(pb, t)).unwrap_or(&0);
+            margin(pb)
+                .partial_cmp(&margin(pa))
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| qb.cmp(&qa))
+                .then_with(|| pa.cmp(&pb))
+        });
+        ordered
+    };
+
+    // Primary capacity already consumed on each (loc, line, t), so spillover can see what is left.
+    let mut used_line_qty: HashMap<(String, String, usize), f64> = HashMap::new();
+    let line_cap_at = |loc: &str, line: &str, t: usize| -> f64 {
+        model
+            .calendar
+            .line_cap_t
+            .get(&(loc.to_string(), line.to_string(), t))
+            .copied()
+            .or_else(|| {
+                model
+                    .lookups
+                    .line_capacity
+                    .get(&(loc.to_string(), line.to_string()))
+                    .copied()
+            })
+            .unwrap_or(0.0)
+    };
+    let alt_eff_cap = |used: &HashMap<(String, String, usize), f64>,
+                       p: usize,
+                       primary: &str,
+                       t: usize|
+     -> f64 {
+        let loc = &model.all_pairs[p].location;
+        let mut extra = 0.0;
+        for (al, eff) in elig(p).into_iter().flatten() {
+            if al == primary {
                 continue;
             }
-            let mut ordered: Vec<usize> = pairs.to_vec();
-            ordered.sort_by(|&pa, &pb| {
-                let ka = (
-                    model.all_pairs[pa].location.clone(),
-                    model.all_pairs[pa].sku.clone(),
-                );
-                let kb = (
-                    model.all_pairs[pb].location.clone(),
-                    model.all_pairs[pb].sku.clone(),
-                );
-                let ma = *model.lookups.margin_map.get(&ka).unwrap_or(&0.0);
-                let mb = *model.lookups.margin_map.get(&kb).unwrap_or(&0.0);
-                let qa = *prod_raw.get(&(pa, t)).unwrap_or(&0);
-                let qb = *prod_raw.get(&(pb, t)).unwrap_or(&0);
-                mb.partial_cmp(&ma)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-                    .then_with(|| qb.cmp(&qa))
-                    .then_with(|| pa.cmp(&pb))
-            });
-            let mut remaining = cap_w;
-            for p in ordered {
+            let u = used.get(&(loc.clone(), al.clone(), t)).copied().unwrap_or(0.0);
+            extra += (line_cap_at(loc, al, t) - u).max(0.0) * eff;
+        }
+        extra
+    };
+    let consume_alt = |used: &mut HashMap<(String, String, usize), f64>,
+                       p: usize,
+                       primary: &str,
+                       t: usize,
+                       spill: f64| {
+        let loc = &model.all_pairs[p].location;
+        let mut rem = spill;
+        for (al, eff) in elig(p).into_iter().flatten() {
+            if al == primary || rem <= 0.0 {
+                continue;
+            }
+            let u = used.get(&(loc.clone(), al.clone(), t)).copied().unwrap_or(0.0);
+            let rem_al = (line_cap_at(loc, al, t) - u).max(0.0);
+            let take = rem.min(rem_al * eff);
+            if take > 0.0 {
+                *used.entry((loc.clone(), al.clone(), t)).or_insert(0.0) += take / eff;
+                rem -= take;
+            }
+        }
+    };
+    let is_prot = |p: usize, t: usize| model.protected_p.contains(&(p, t));
+
+    // Quantity-capped group (a line without full rate data, or a location).
+    let clip_group_qty = |prod_raw: &mut HashMap<PairWeekKey, i64>,
+                          used: &mut HashMap<(String, String, usize), f64>,
+                          loc: &str,
+                          line: &str,
+                          pairs: &[usize],
+                          cap_for_t: &dyn Fn(usize) -> i64| {
+        let has_alt = pairs.iter().any(|&p| elig(p).is_some());
+        for t in 0..t_len {
+            let cap_w = cap_for_t(t);
+            let ukey = (loc.to_string(), line.to_string(), t);
+            let total: i64 = pairs.iter().map(|&p| *prod_raw.get(&(p, t)).unwrap_or(&0)).sum();
+            let used_now = used.get(&ukey).copied().unwrap_or(0.0);
+            if (total as f64) + used_now <= cap_w as f64 {
+                *used.entry(ukey).or_insert(0.0) += total as f64;
+                continue;
+            }
+            let ordered_all = sort_pairs(prod_raw, pairs, t);
+            let fixed_qty: i64 = pairs
+                .iter()
+                .filter(|&&p| is_prot(p, t))
+                .map(|&p| *prod_raw.get(&(p, t)).unwrap_or(&0))
+                .sum();
+            *used.entry(ukey.clone()).or_insert(0.0) += fixed_qty as f64;
+            let mut remaining = (cap_w as f64 - used.get(&ukey).copied().unwrap_or(0.0)).max(0.0) as i64;
+            for p in ordered_all.into_iter().filter(|&p| !is_prot(p, t)) {
                 let cur = *prod_raw.get(&(p, t)).unwrap_or(&0);
                 if cur == 0 {
                     continue;
                 }
-                let key = (
-                    model.all_pairs[p].location.clone(),
-                    model.all_pairs[p].sku.clone(),
-                );
-                let (moq, lot_raw) = *model
-                    .lookups
-                    .production_lot_map
-                    .get(&key)
-                    .unwrap_or(&(0, 1));
-                let lot = lot_raw.max(1);
-                let allowed = if remaining > 0 {
-                    (remaining / lot) * lot
-                } else {
-                    0
-                };
+                let (moq, lot) = lot_info(p);
+                let alt_extra = if has_alt { alt_eff_cap(used, p, line, t) as i64 } else { 0 };
+                let allowed = ((remaining + alt_extra) / lot) * lot;
                 let mut clipped = if allowed <= 0 { 0 } else { cur.min(allowed) };
                 if clipped > 0 && clipped < moq {
                     clipped = 0;
                 }
                 prod_raw.insert((p, t), clipped);
-                remaining -= clipped;
+                let prim_used = clipped.min(remaining);
+                remaining -= prim_used;
+                *used.entry(ukey.clone()).or_insert(0.0) += prim_used as f64;
+                if clipped > prim_used && has_alt {
+                    consume_alt(used, p, line, t, (clipped - prim_used) as f64);
+                }
             }
         }
     };
 
-    for (loc, line) in line_order {
-        let pairs = &line_pairs[&(loc.clone(), line.clone())];
+    for ((loc, line), pairs) in &line_pairs {
         let lk = (loc.clone(), line.clone());
         let hours = *model.lookups.line_hours.get(&lk).unwrap_or(&0.0);
         let all_have_rate = hours > 0.0
             && pairs.iter().all(|&p| {
-                let k = (
-                    model.all_pairs[p].location.clone(),
-                    model.all_pairs[p].sku.clone(),
-                );
+                let k = (model.all_pairs[p].location.clone(), model.all_pairs[p].sku.clone());
                 model.lookups.sku_production_rate.contains_key(&k)
             });
 
         if all_have_rate {
             let mut per_unit: HashMap<usize, f64> = HashMap::new();
             for &p in pairs {
-                let k = (
-                    model.all_pairs[p].location.clone(),
-                    model.all_pairs[p].sku.clone(),
-                );
+                let k = (model.all_pairs[p].location.clone(), model.all_pairs[p].sku.clone());
                 let info = &model.lookups.sku_production_rate[&k];
                 per_unit.insert(p, 1.0 / (info.rate_per_hour * info.yield_rate));
             }
+            let has_alt = pairs.iter().any(|&p| elig(p).is_some());
             for t in 0..t_len {
-                let avail = *model
-                    .calendar
-                    .hours_t
-                    .get(&(loc.clone(), line.clone(), t))
-                    .unwrap_or(&hours);
+                let avail = *model.calendar.hours_t.get(&(loc.clone(), line.clone(), t)).unwrap_or(&hours);
+                let ukey = (loc.clone(), line.clone(), t);
                 let total_hours: f64 = pairs
                     .iter()
                     .map(|&p| (*prod_raw.get(&(p, t)).unwrap_or(&0) as f64) * per_unit[&p])
                     .sum();
                 if total_hours <= avail + 1e-9 {
+                    let q: i64 = pairs.iter().map(|&p| *prod_raw.get(&(p, t)).unwrap_or(&0)).sum();
+                    *used_line_qty.entry(ukey).or_insert(0.0) += q as f64;
                     continue;
                 }
-                let mut ordered: Vec<usize> = pairs.clone();
-                ordered.sort_by(|&pa, &pb| {
-                    let ka = (
-                        model.all_pairs[pa].location.clone(),
-                        model.all_pairs[pa].sku.clone(),
-                    );
-                    let kb = (
-                        model.all_pairs[pb].location.clone(),
-                        model.all_pairs[pb].sku.clone(),
-                    );
-                    let ma = *model.lookups.margin_map.get(&ka).unwrap_or(&0.0);
-                    let mb = *model.lookups.margin_map.get(&kb).unwrap_or(&0.0);
-                    let qa = *prod_raw.get(&(pa, t)).unwrap_or(&0);
-                    let qb = *prod_raw.get(&(pb, t)).unwrap_or(&0);
-                    mb.partial_cmp(&ma)
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                        .then_with(|| qb.cmp(&qa))
-                        .then_with(|| pa.cmp(&pb))
-                });
-                let mut remaining = avail;
-                for p in ordered {
+                let ordered_all = sort_pairs(prod_raw, pairs, t);
+                let fixed_qty: i64 = pairs
+                    .iter()
+                    .filter(|&&p| is_prot(p, t))
+                    .map(|&p| *prod_raw.get(&(p, t)).unwrap_or(&0))
+                    .sum();
+                let fixed_hours: f64 = pairs
+                    .iter()
+                    .filter(|&&p| is_prot(p, t))
+                    .map(|&p| (*prod_raw.get(&(p, t)).unwrap_or(&0) as f64) * per_unit[&p])
+                    .sum();
+                *used_line_qty.entry(ukey.clone()).or_insert(0.0) += fixed_qty as f64;
+                let mut remaining = avail - fixed_hours;
+                for p in ordered_all.into_iter().filter(|&p| !is_prot(p, t)) {
                     let cur = *prod_raw.get(&(p, t)).unwrap_or(&0);
                     if cur == 0 {
                         continue;
                     }
-                    let key = (
-                        model.all_pairs[p].location.clone(),
-                        model.all_pairs[p].sku.clone(),
-                    );
-                    let (moq, lot_raw) = *model
-                        .lookups
-                        .production_lot_map
-                        .get(&key)
-                        .unwrap_or(&(0, 1));
-                    let lot = lot_raw.max(1);
+                    let (moq, lot) = lot_info(p);
                     let fits = if remaining > 0.0 {
                         ((remaining / per_unit[&p]) + 1e-9).floor() as i64
                     } else {
                         0
                     };
-                    let allowed = (fits / lot) * lot;
+                    let alt_extra = if has_alt { alt_eff_cap(&used_line_qty, p, line, t) as i64 } else { 0 };
+                    let allowed = ((fits + alt_extra) / lot) * lot;
                     let mut clipped = if allowed <= 0 { 0 } else { cur.min(allowed) };
                     if clipped > 0 && clipped < moq {
                         clipped = 0;
                     }
                     prod_raw.insert((p, t), clipped);
-                    remaining -= (clipped as f64) * per_unit[&p];
+                    let prim_good = clipped.min(fits);
+                    remaining -= (prim_good as f64) * per_unit[&p];
+                    *used_line_qty.entry(ukey.clone()).or_insert(0.0) += prim_good as f64;
+                    if clipped > prim_good && has_alt {
+                        consume_alt(&mut used_line_qty, p, line, t, (clipped - prim_good) as f64);
+                    }
                 }
             }
             continue;
@@ -245,7 +295,7 @@ pub fn clip_by_capacity(prod_raw: &mut HashMap<PairWeekKey, i64>, model: &LpMode
 
         if let Some(&cap) = model.lookups.line_capacity.get(&lk) {
             let static_cap = cap as i64;
-            clip_group(prod_raw, pairs, &|t| {
+            clip_group_qty(prod_raw, &mut used_line_qty, loc, line, pairs, &|t| {
                 model
                     .calendar
                     .line_cap_t
@@ -256,11 +306,12 @@ pub fn clip_by_capacity(prod_raw: &mut HashMap<PairWeekKey, i64>, model: &LpMode
         }
     }
 
-    for loc in loc_order {
-        let pairs = &loc_pairs[&loc];
-        if let Some(&cap) = model.lookups.location_capacity.get(&loc) {
+    // Location capacity covers every producible pair of a location that has an unassigned pair.
+    for loc in &loc_has_unassigned {
+        let pairs = &loc_producible[loc];
+        if let Some(&cap) = model.lookups.location_capacity.get(loc) {
             let static_cap = cap as i64;
-            clip_group(prod_raw, pairs, &|t| {
+            clip_group_qty(prod_raw, &mut used_line_qty, loc, "", pairs, &|t| {
                 model
                     .calendar
                     .loc_cap_t
@@ -531,7 +582,7 @@ pub fn extract_postprocess_output(
     req: &OptimizeRequestPayload,
 ) -> PostprocessOutput {
     let t_len = model.t_len;
-    let (mut prod_raw, mut replen_out, release_out) = round_lp_solution(x, model);
+    let (mut prod_raw, mut replen_out, mut release_out) = round_lp_solution(x, model);
 
     clip_by_capacity(&mut prod_raw, model);
 
@@ -550,6 +601,33 @@ pub fn extract_postprocess_output(
 
     clip_transport_to_supply(&prod_raw, &mut replen_out, &mut ship_out, x, model);
     clip_excess_inventory(&mut prod_raw, &replen_out, &ship_out, model, 1.2);
+
+    // Restore firmed cells to their committed quantities (and firm purchase releases).
+    let row_of = |p: usize, t: usize| {
+        model.facts_lookup.get(&(
+            model.all_pairs[p].location.clone(),
+            model.all_pairs[p].sku.clone(),
+            model.weeks[t].clone(),
+        ))
+    };
+    for &(p, t) in &model.protected_p {
+        let q = row_of(p, t).map(|r| r.production_qty).unwrap_or(0);
+        prod_raw.insert((p, t), q);
+    }
+    let mut restore_r: Vec<(usize, usize)> = model.protected_r.iter().copied().collect();
+    restore_r.extend(model.firm_purchase.keys().copied());
+    for (p, t) in restore_r {
+        let q = row_of(p, t).map(|r| r.replenishment_qty).unwrap_or(0);
+        replen_out.insert((p, t), q);
+    }
+    for (&(p, t), &a) in &model.firm_purchase {
+        let key = (model.all_pairs[p].location.clone(), model.all_pairs[p].sku.clone());
+        let e_lt = model.lookups.procurement_lt_map.get(&key).copied().unwrap_or(0);
+        let te = t as i64 - e_lt;
+        if te >= 0 {
+            release_out.insert((p, te as usize), a.round() as i64);
+        }
+    }
 
     // Build lookup maps for write-back
     let mut opt_map: HashMap<(String, String, String), (i64, i64, i64)> =

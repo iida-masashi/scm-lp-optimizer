@@ -1,6 +1,6 @@
 use crate::schema::{
-    BomRow, CapacityOverrideRow, InitInventoryRow, ItemLocationRow, LocationRow,
-    ProductionLineRow, TransportRouteRow,
+    BomRow, CapacityOverrideRow, InitInventoryRow, ItemLocationRow, LineEligibilityRow,
+    LocationRow, ProductionLineRow, TransportRouteRow, UomFactorRow,
 };
 use std::collections::{HashMap, HashSet};
 
@@ -55,6 +55,34 @@ pub struct MasterLookups {
     pub cost_map: HashMap<LocSku, f64>,
     pub procurement_cost_map: HashMap<LocSku, f64>,
     pub can_procure_override_map: HashMap<LocSku, bool>,
+    /// `(target_location, parent_sku)` -> normalized yield rate (default 1.0).
+    pub yield_map: HashMap<LocSku, f64>,
+    pub var_mfg_cost_map: HashMap<LocSku, f64>,
+    pub allocation_priority_map: HashMap<String, i64>,
+    /// `location -> storage UOM` (upper-case; BASE omitted).
+    pub storage_uom_map: HashMap<String, String>,
+    pub uom_factors: HashMap<(String, String), f64>,
+    /// `(location, sku) -> [(alt_line, efficiency)]` sorted by (-efficiency, line_id).
+    pub line_eligibility_map: HashMap<LocSku, Vec<(String, f64)>>,
+    pub min_rem_shelf_map: HashMap<LocSku, i64>,
+    pub setup_cost_map: HashMap<LocSku, f64>,
+    pub setup_time_map: HashMap<LocSku, f64>,
+}
+
+/// Parent process yield as a fraction in (0, 1]. None / <=0 / >1 read as 1.0.
+pub fn normalize_yield_rate(y: Option<f64>) -> f64 {
+    match y {
+        Some(v) if v > 0.0 && v <= 1.0 => v,
+        _ => 1.0,
+    }
+}
+
+/// Component scrap as a fraction in [0, 1). None / <0 / >=1 read as 0.0.
+pub fn normalize_scrap_rate(s: Option<f64>) -> f64 {
+    match s {
+        Some(v) if (0.0..1.0).contains(&v) => v,
+        _ => 0.0,
+    }
 }
 
 /// Round qty up to respect MOQ and lot_size constraints (`solver_base._apply_lot_sizing`).
@@ -84,6 +112,8 @@ pub fn build_master_lookups(
     item_locations: &[ItemLocationRow],
     init_inv: &[InitInventoryRow],
     locations: &[LocationRow],
+    line_eligibility: &[LineEligibilityRow],
+    uom_factors: &[UomFactorRow],
 ) -> MasterLookups {
     let mut lookups = MasterLookups::default();
 
@@ -110,12 +140,13 @@ pub fn build_master_lookups(
                 lookups.sku_to_line.insert(rate_key.clone(), line_id.clone());
             }
         }
+        lookups
+            .yield_map
+            .entry(rate_key.clone())
+            .or_insert(normalize_yield_rate(r.yield_rate));
         if !lookups.sku_production_rate.contains_key(&rate_key) {
             let rph = r.rate_per_hour.unwrap_or(0.0);
-            let yr = match r.yield_rate {
-                Some(y) if y > 0.0 => y,
-                _ => 1.0,
-            };
+            let yr = normalize_yield_rate(r.yield_rate);
             if rph > 0.0 {
                 lookups.sku_production_rate.insert(
                     rate_key,
@@ -132,7 +163,7 @@ pub fn build_master_lookups(
             parent_sku: r.parent_sku.clone(),
             child_sku: r.child_sku.clone(),
             quantity: r.quantity,
-            scrap_rate: r.scrap_rate.unwrap_or(0.0),
+            scrap_rate: normalize_scrap_rate(r.scrap_rate),
             line_id: r.line_id.clone(),
         });
     }
@@ -201,6 +232,26 @@ pub fn build_master_lookups(
         if let Some(cost) = r.cost {
             lookups.cost_map.insert(key.clone(), cost);
         }
+        if let Some(sc) = r.setup_cost {
+            if sc > 0.0 {
+                lookups.setup_cost_map.insert(key.clone(), sc);
+            }
+        }
+        if let Some(st) = r.setup_time_hours {
+            if st > 0.0 {
+                lookups.setup_time_map.insert(key.clone(), st);
+            }
+        }
+        if let Some(mr) = r.min_remaining_shelf_life_weeks {
+            if mr > 0 {
+                lookups.min_rem_shelf_map.insert(key.clone(), mr);
+            }
+        }
+        if let Some(vmc) = r.variable_manufacturing_cost {
+            if vmc > 0.0 {
+                lookups.var_mfg_cost_map.insert(key.clone(), vmc);
+            }
+        }
         if let Some(proc_cost) = r.procurement_unit_cost {
             lookups.procurement_cost_map.insert(key, proc_cost);
         }
@@ -219,12 +270,64 @@ pub fn build_master_lookups(
         if let Some(hr) = row.holding_cost_rate {
             lookups.location_holding_rate.insert(row.location.clone(), hr);
         }
+        if let Some(u) = row.storage_capacity_uom.as_deref() {
+            let u = u.trim().to_uppercase();
+            if !u.is_empty() && u != "BASE" {
+                lookups.storage_uom_map.insert(row.location.clone(), u);
+            }
+        }
+        if let Some(ap) = row.allocation_priority {
+            lookups.allocation_priority_map.insert(row.location.clone(), ap);
+        }
         if let Some(sc) = row.max_storage_capacity {
             lookups.storage_capacity_map.insert(row.location.clone(), sc);
         }
     }
 
+    for u in uom_factors {
+        lookups
+            .uom_factors
+            .insert((u.sku.clone(), u.uom.trim().to_uppercase()), u.factor);
+    }
+
+    for e in line_eligibility {
+        let eff = match e.efficiency_rate {
+            Some(x) if x != 0.0 => x,
+            _ => 1.0,
+        };
+        if eff > 0.0 && lookups.line_capacity.contains_key(&(e.location.clone(), e.line_id.clone())) {
+            lookups
+                .line_eligibility_map
+                .entry((e.location.clone(), e.sku.clone()))
+                .or_default()
+                .push((e.line_id.clone(), eff));
+        }
+    }
+    for v in lookups.line_eligibility_map.values_mut() {
+        v.sort_by(|a, b| {
+            b.1.partial_cmp(&a.1)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.0.cmp(&b.0))
+        });
+    }
+
     lookups
+}
+
+/// `storage_uom_coeff`: inventory-to-storage-UOM multiplier for a SKU.
+pub fn storage_uom_coeff(
+    sku: &str,
+    suom: Option<&String>,
+    uom_factors: &HashMap<(String, String), f64>,
+) -> f64 {
+    if let Some(u) = suom {
+        if let Some(&fac) = uom_factors.get(&(sku.to_string(), u.clone())) {
+            if fac > 0.0 {
+                return 1.0 / fac;
+            }
+        }
+    }
+    1.0
 }
 
 #[derive(Debug, Clone, Default)]
