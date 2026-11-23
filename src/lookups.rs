@@ -94,11 +94,14 @@ pub fn apply_lot_sizing(qty_f64: f64, moq: i64, lot_size: i64) -> i64 {
     }
     let moq_f = moq.max(0) as f64;
     let qty = qty_f64.max(moq_f);
+    // The interior-point LP solution carries ~1e-8 relative noise (10.0000003 must not become 11);
+    // openSCM's simplex needs only 1e-9, so a slightly larger relative tolerance is used here.
+    let tol = 1e-6 * qty.max(1.0);
     if lot_size > 1 {
         let lot_f = lot_size as f64;
-        ((qty / lot_f).ceil() as i64) * lot_size
+        (((qty - tol) / lot_f).ceil().max(1.0) as i64) * lot_size
     } else {
-        qty.ceil() as i64
+        ((qty - tol).ceil().max(1.0)) as i64
     }
 }
 

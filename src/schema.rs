@@ -52,7 +52,8 @@ pub struct SolverConfig {
     /// Network-Design `TR` edges so the LP can choose / split among them (openSCM `dynamic_sourcing`).
     #[serde(default)]
     pub dynamic_sourcing: bool,
-    /// `"lp"` (default, Clarabel interior point, duals) or `"milp"` (HiGHS branch & cut with
+    /// `"lp"` (default, Clarabel interior point, duals), `"highs"` (HiGHS simplex LP: vertex solutions
+    /// identical in kind to openSCM, with duals) or `"milp"` (HiGHS branch & cut with
     /// lot-size integers and setup binaries).
     #[serde(default = "default_solver")]
     pub solver: String,

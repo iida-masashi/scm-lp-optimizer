@@ -1,0 +1,271 @@
+{
+ "request": {
+  "config": {
+   "solver": "highs",
+   "dynamic_sourcing": false,
+   "milp_relative_gap": 0.0
+  },
+  "facts": [
+   {
+    "location": "PL",
+    "sku": "FG",
+    "week_start": "2026-01-05",
+    "sales_qty": 25.0,
+    "production_qty": 0,
+    "replenishment_qty": 0,
+    "is_fixed": false,
+    "production_fence_weeks": 0,
+    "replenishment_fence_weeks": 0
+   },
+   {
+    "location": "PL",
+    "sku": "FG",
+    "week_start": "2026-01-12",
+    "sales_qty": 25.0,
+    "production_qty": 0,
+    "replenishment_qty": 0,
+    "is_fixed": false,
+    "production_fence_weeks": 0,
+    "replenishment_fence_weeks": 0
+   },
+   {
+    "location": "PL",
+    "sku": "FG",
+    "week_start": "2026-01-19",
+    "sales_qty": 25.0,
+    "production_qty": 0,
+    "replenishment_qty": 0,
+    "is_fixed": false,
+    "production_fence_weeks": 0,
+    "replenishment_fence_weeks": 0
+   },
+   {
+    "location": "PL",
+    "sku": "FG",
+    "week_start": "2026-01-26",
+    "sales_qty": 25.0,
+    "production_qty": 0,
+    "replenishment_qty": 0,
+    "is_fixed": false,
+    "production_fence_weeks": 0,
+    "replenishment_fence_weeks": 0
+   },
+   {
+    "location": "PL",
+    "sku": "FG",
+    "week_start": "2026-02-02",
+    "sales_qty": 25.0,
+    "production_qty": 0,
+    "replenishment_qty": 0,
+    "is_fixed": false,
+    "production_fence_weeks": 0,
+    "replenishment_fence_weeks": 0
+   },
+   {
+    "location": "PL",
+    "sku": "FG",
+    "week_start": "2026-02-09",
+    "sales_qty": 25.0,
+    "production_qty": 0,
+    "replenishment_qty": 0,
+    "is_fixed": false,
+    "production_fence_weeks": 0,
+    "replenishment_fence_weeks": 0
+   },
+   {
+    "location": "PL",
+    "sku": "RAW",
+    "week_start": "2026-01-05",
+    "sales_qty": 0.0,
+    "production_qty": 0,
+    "replenishment_qty": 0,
+    "is_fixed": false,
+    "production_fence_weeks": 0,
+    "replenishment_fence_weeks": 0
+   },
+   {
+    "location": "PL",
+    "sku": "RAW",
+    "week_start": "2026-01-12",
+    "sales_qty": 0.0,
+    "production_qty": 0,
+    "replenishment_qty": 0,
+    "is_fixed": false,
+    "production_fence_weeks": 0,
+    "replenishment_fence_weeks": 0
+   },
+   {
+    "location": "PL",
+    "sku": "RAW",
+    "week_start": "2026-01-19",
+    "sales_qty": 0.0,
+    "production_qty": 0,
+    "replenishment_qty": 0,
+    "is_fixed": false,
+    "production_fence_weeks": 0,
+    "replenishment_fence_weeks": 0
+   },
+   {
+    "location": "PL",
+    "sku": "RAW",
+    "week_start": "2026-01-26",
+    "sales_qty": 0.0,
+    "production_qty": 0,
+    "replenishment_qty": 0,
+    "is_fixed": false,
+    "production_fence_weeks": 0,
+    "replenishment_fence_weeks": 0
+   },
+   {
+    "location": "PL",
+    "sku": "RAW",
+    "week_start": "2026-02-02",
+    "sales_qty": 0.0,
+    "production_qty": 0,
+    "replenishment_qty": 0,
+    "is_fixed": false,
+    "production_fence_weeks": 0,
+    "replenishment_fence_weeks": 0
+   },
+   {
+    "location": "PL",
+    "sku": "RAW",
+    "week_start": "2026-02-09",
+    "sales_qty": 0.0,
+    "production_qty": 0,
+    "replenishment_qty": 0,
+    "is_fixed": false,
+    "production_fence_weeks": 0,
+    "replenishment_fence_weeks": 0
+   }
+  ],
+  "lines": [
+   {
+    "location": "PL",
+    "line_id": "L1",
+    "max_capacity": 100
+   }
+  ],
+  "bom": [
+   {
+    "parent_sku": "FG",
+    "child_sku": "RAW",
+    "quantity": 2.0,
+    "scrap_rate": 0.1,
+    "yield_rate": 0.8,
+    "target_location": "PL",
+    "line_id": "L1"
+   }
+  ],
+  "transport_routes": [],
+  "item_locations": [
+   {
+    "location": "PL",
+    "sku": "RAW",
+    "cost": 3.0,
+    "can_procure": true,
+    "procurement_unit_cost": 3.0
+   },
+   {
+    "location": "PL",
+    "sku": "FG",
+    "price": 50.0,
+    "cost": 12.0
+   }
+  ],
+  "locations": [
+   {
+    "location": "PL",
+    "holding_cost": 0.5
+   }
+  ],
+  "init_inventory": [],
+  "line_eligibility": []
+ },
+ "expected": [
+  {
+   "location": "PL",
+   "sku": "FG",
+   "week_start": "2026-01-05",
+   "production_qty": 25,
+   "replenishment_qty": 0
+  },
+  {
+   "location": "PL",
+   "sku": "FG",
+   "week_start": "2026-01-12",
+   "production_qty": 25,
+   "replenishment_qty": 0
+  },
+  {
+   "location": "PL",
+   "sku": "FG",
+   "week_start": "2026-01-19",
+   "production_qty": 25,
+   "replenishment_qty": 0
+  },
+  {
+   "location": "PL",
+   "sku": "FG",
+   "week_start": "2026-01-26",
+   "production_qty": 25,
+   "replenishment_qty": 0
+  },
+  {
+   "location": "PL",
+   "sku": "FG",
+   "week_start": "2026-02-02",
+   "production_qty": 25,
+   "replenishment_qty": 0
+  },
+  {
+   "location": "PL",
+   "sku": "FG",
+   "week_start": "2026-02-09",
+   "production_qty": 25,
+   "replenishment_qty": 0
+  },
+  {
+   "location": "PL",
+   "sku": "RAW",
+   "week_start": "2026-01-05",
+   "production_qty": 0,
+   "replenishment_qty": 70
+  },
+  {
+   "location": "PL",
+   "sku": "RAW",
+   "week_start": "2026-01-12",
+   "production_qty": 0,
+   "replenishment_qty": 70
+  },
+  {
+   "location": "PL",
+   "sku": "RAW",
+   "week_start": "2026-01-19",
+   "production_qty": 0,
+   "replenishment_qty": 70
+  },
+  {
+   "location": "PL",
+   "sku": "RAW",
+   "week_start": "2026-01-26",
+   "production_qty": 0,
+   "replenishment_qty": 70
+  },
+  {
+   "location": "PL",
+   "sku": "RAW",
+   "week_start": "2026-02-02",
+   "production_qty": 0,
+   "replenishment_qty": 70
+  },
+  {
+   "location": "PL",
+   "sku": "RAW",
+   "week_start": "2026-02-09",
+   "production_qty": 0,
+   "replenishment_qty": 70
+  }
+ ]
+}

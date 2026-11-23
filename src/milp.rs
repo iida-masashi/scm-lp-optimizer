@@ -21,6 +21,8 @@ use crate::solver_clarabel::ClarabelSolveResult;
 pub struct MilpFormulation {
     pub lp: FormulatedLp,
     pub integer_cols: Vec<usize>,
+    /// Pure LP solved with HiGHS simplex (`solver = "highs"`): vertex solutions like openSCM, with duals.
+    pub continuous: bool,
 }
 
 /// `_compute_milp_pair_ub`: valid horizon upper bound per pair, propagated upstream along BOM/transport.
@@ -246,7 +248,7 @@ pub fn formulate_milp(model: &LpModel, mut lp: FormulatedLp) -> MilpFormulation 
     }
 
     let integer_cols = b.integer_cols;
-    MilpFormulation { lp, integer_cols }
+    MilpFormulation { lp, integer_cols, continuous: false }
 }
 
 fn merge_terms(terms: &[(usize, f64)]) -> Vec<(usize, f64)> {
@@ -325,6 +327,22 @@ pub fn solve_milp(mf: &MilpFormulation, time_limit_secs: f64, rel_gap: f64) -> R
     }
 
     let mut bottlenecks = Vec::new();
+    if mf.continuous {
+        // LP duals (HiGHS row duals: equality rows first, then the <= rows).
+        let duals = solved.get_solution().dual_rows().to_vec();
+        let n_eq = lp.eq_rows.len();
+        for (i, row) in lp.ub_rows.iter().enumerate() {
+            if let (Some(desc), Some(&d)) = (&row.bottleneck_desc, duals.get(n_eq + i)) {
+                if d.abs() > 1e-4 {
+                    bottlenecks.push(Bottleneck {
+                        description: desc.clone(),
+                        marginal_value: (d * 10000.0).round() / 10000.0,
+                    });
+                }
+            }
+        }
+        return Ok(ClarabelSolveResult { x, bottlenecks });
+    }
     for row in &lp.ub_rows {
         if let Some(ref desc) = row.bottleneck_desc {
             if row.rhs <= 0.0 || row.rhs >= 1e15 {

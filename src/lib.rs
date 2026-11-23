@@ -46,8 +46,15 @@ pub fn run_optimization(
     };
 
     let use_milp = req.config.solver.eq_ignore_ascii_case("milp");
+    let use_highs_lp = req.config.solver.eq_ignore_ascii_case("highs");
     let lp0 = formulate_lp(&model, &req.config);
-    let mut milp_form = if use_milp { Some(crate::milp::formulate_milp(&model, lp0.clone())) } else { None };
+    let mut milp_form = if use_milp {
+        Some(crate::milp::formulate_milp(&model, lp0.clone()))
+    } else if use_highs_lp {
+        Some(crate::milp::MilpFormulation { lp: lp0.clone(), integer_cols: Vec::new(), continuous: true })
+    } else {
+        None
+    };
     let mut formulated = match &milp_form {
         Some(m) => m.lp.clone(),
         None => lp0,
@@ -56,6 +63,7 @@ pub fn run_optimization(
         Some(m) => crate::milp::solve_milp(&crate::milp::MilpFormulation {
             lp: f.clone(),
             integer_cols: m.integer_cols.clone(),
+            continuous: m.continuous,
         }, req.config.milp_time_limit_secs, req.config.milp_relative_gap),
         None => solve_lp_clarabel(f),
     };
