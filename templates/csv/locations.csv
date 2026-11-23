@@ -1,3 +1,3 @@
-location,holding_cost,holding_cost_rate,max_storage_capacity
-PLANT-A,0.5,,2000.0
-DC-EAST,0.8,,1000.0
+location,holding_cost,holding_cost_rate,max_storage_capacity,allocation_priority,storage_capacity_uom
+PLANT-A,0.5,,2000.0,,
+DC-EAST,0.8,,1000.0,,

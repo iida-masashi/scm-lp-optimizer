@@ -9,5 +9,11 @@
   "plan_stability_lambda": 0.0,
   "profit_maximization": false,
   "terminal_lookback_weeks": 4,
-  "formulation_mode": "scipy"
+  "formulation_mode": "scipy",
+  "ss_penalty_cost_ratio": 1.0,
+  "terminal_inventory_value_ratio": 0.95,
+  "dynamic_sourcing": false,
+  "solver": "lp",
+  "milp_time_limit_secs": 60.0,
+  "milp_relative_gap": 0.005
 }

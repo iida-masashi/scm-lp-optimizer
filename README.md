@@ -53,7 +53,7 @@
 | **現場実行可能性（ロット・能力整合）** | LP の連続解（小数）をそのまま現場に出せず、丸めると設備能力超過や上流部品不足が発生。 | 4段階ポスト処理（MOQ/刻みロット丸め ➔ 利益順の能力クリップ ➔ 上流供給連動クリップ ➔ 過剰在庫クリップ）により、**そのまま発注・製造指示に使える整数ロット計画**を出力。 |
 | **ボトルネック可視化と意思決定の迅速化** | どこが真のボトルネックか担当者の経験と勘に依存し、残業・外注判断の投資対効果が不明確。 | 内点法の双対解（Shadow Price）を自動抽出し、**設備・倉庫・週ごとの「能力1単位あたりの限界価値」を数値化**。客観的根拠に基づく迅速な能力増強判断を実現。 |
 | **既存 SCP / ERP 資産の拡張性とコスト最適化** | Kinaxis / SAP / Anaplan 等で高度な数理最適化（Optimizer）を有効化・追加契約するとライセンスやバッチ処理負荷が増大しやすい。 | 標準の JSON REST API (`POST /optimize`) と変更差分出力 (`edits`) により、**既存の SCP / ERP の画面・データモデル資産を活かしたまま、低コスト・ミリ秒単位で外部 LP 最適化機能をアドオン可能**。 |
-| **システム運用・インフラ保守性** | Python 環境での CBC / GLPK / HiGHS 等のネイティブ依存エラー、プロセス起動の遅さ、コンテナ肥大化。 | **Pure Rust (`clarabel`) による単一静的バイナリ & 軽量コンテナ**。OS 依存の共有ライブラリが一切不要で、Google Cloud Run 等のサーバーレス環境でコールドスタート・メモリ消費ともに極小化。 |
+| **システム運用・インフラ保守性** | Python 環境での CBC / GLPK / HiGHS 等のネイティブ依存エラー、プロセス起動の遅さ、コンテナ肥大化。 | **既定は Pure Rust (`clarabel`) の軽量バイナリ**。HiGHS を使う MILP / 単体法 LP は `highs` feature（既定で有効）でビルドし、`--no-default-features` なら C/C++ 依存ゼロの単一バイナリになります。 |
 
 ---
 
@@ -63,9 +63,11 @@
 
 ### 主な特徴
 
-* **Pure Rust 実装 & C/C++ ネイティブ依存ゼロ**:
-  * コアの線形計画ソルバーとして、オックスフォード大学制御グループ等で開発された Pure Rust の主双対内点法（Primal-Dual Interior Point Method）ソルバー [`clarabel`](https://crates.io/crates/clarabel) を採用しています。
-  * 従来の Python + PuLP / CBC / GLPK / HiGHS のように OS 固有の C/C++ 共有ライブラリや外部ソルバーバイナリをインストールする必要がなく、単一の静的リンクバイナリまたは軽量コンテナとしてどこでも同一に動作します。
+* **3つのソルバーバックエンド（`config.solver`）**:
+  * `"lp"`（既定）: Pure Rust の主双対内点法 [`clarabel`](https://crates.io/crates/clarabel)。C/C++ 依存なし・高速・双対値（Shadow Price）あり。解は内点のため小数を含み、ロット丸めで openSCM と数ユニットずれることがあります。
+  * `"highs"`: HiGHS 単体法による LP。**openSCM と同じソルバー**で頂点解が得られ、`tests/parity/` の7シナリオで openSCM の計画と全セル一致します。双対値あり。
+  * `"milp"`: HiGHS による MILP。ロット整数 `Z`・最小バッチ/セットアップ binary `Y`（`setup_cost` / `setup_time_hours`）を厳密に扱います。`milp_time_limit_secs`（既定 60）で打ち切り、その時点の最良解を返します。双対値は無く、`bottlenecks` は満杯の行を限界値 1.0 で返します。
+  * `highs` / `milp` には CMake・C++ コンパイラ・libclang が必要です（`highs` feature、既定で有効）。不要な環境では `cargo build --release --no-default-features` で Clarabel のみのビルドにできます。
 * **圧倒的な計算速度（サブミリ秒〜数十ミリ秒）**:
   * 疎行列（CSC: Compressed Sparse Column）を Rust のメモリ上で直接構築し、プロセス起動や Python オブジェクト生成のオーバーヘッドなしに求解します。中規模ネットワークであれば **1ミリ秒未満〜数ミリ秒** で最適解に到達します。
 * **実行インターフェースと組み込み Web コンソールを標準同梱**:
@@ -94,7 +96,7 @@ flowchart LR
     A["<div style='color:#ffffff;'><b>入力データ (JSON / CSV)</b><br/>・マスタ (拠点/品目/BOM/輸送/設備)<br/>・初期在庫 / 確定入荷予定<br/>・週次販売需要 (facts)</div>"]:::io
     B["<div style='color:#ffffff;'><b>1. 前処理・グラフ構築 (graph.rs)</b><br/>・週次カレンダー検証 (7日等間隔)<br/>・BOM/輸送網のトポロジカルソート<br/>・下流需要のリードタイム考慮伝播<br/>・動的安全性在庫ターゲット算出</div>"]:::step
     C["<div style='color:#ffffff;'><b>2. LPモデル構築 (lp_model.rs)</b><br/>・決定変数 (P, R, TR, I, U, E, SS, D)<br/>・目的関数 (11種のコスト/ペナルティ項)<br/>・等式制約 (在庫収支・輸送合計)<br/>・不等式制約 (設備/保管/調達能力)</div>"]:::step
-    D["<div style='color:#ffffff;'><b>3. 内点法ソルバー (solver_clarabel.rs)</b><br/>・CSC疎行列への直接コンパイル<br/>・Clarabel 主双対内点法による求解<br/>・主解 (最適フロー) の抽出<br/>・双対解 (Shadow Price) の抽出</div>"]:::solver
+    D["<div style='color:#ffffff;'><b>3. ソルバー (solver_clarabel.rs / milp.rs)</b><br/>・CSC疎行列への直接コンパイル<br/>・Clarabel 主双対内点法による求解<br/>・主解 (最適フロー) の抽出<br/>・双対解 (Shadow Price) の抽出</div>"]:::solver
     E["<div style='color:#ffffff;'><b>4. ポスト処理 (postprocess.rs)</b><br/>・Step 1: MOQ / ロットサイズ丸め<br/>・Step 2: 利益順のライン能力クリップ<br/>・Step 3: 上流供給連動クリップ (PMU-9b)<br/>・Step 4: 過剰在庫クリップ (L-10)</div>"]:::step
     F["<div style='color:#ffffff;'><b>出力データ (JSON)</b><br/>・更新後計画 (facts)<br/>・初期計画からの変更差分 (edits)<br/>・ボトルネック潜在価格 (bottlenecks)</div>"]:::io
 
@@ -227,8 +229,11 @@ $$
 | `config` | 任意 | ソルバーの重み係数・動作フラグ（欠品ペナルティ、安全在庫ペナルティ、利益優先モード、デフォルト安全在庫週数など）。省略時は標準デフォルト値が適用されます。 |
 | `facts` | **必須** | 拠点 (`location`) × 品目 (`sku`) × 週 (`week_start`: `YYYY-MM-DD`) ごとのトランザクションレコード。販売需要 (`sales_qty`) や既存の生産/補充計画値を保持します。**週次カレンダーは7日等間隔である必要があります。** |
 | `item_locations` | 推奨 | 拠点×品目マスタ。外部調達可否 (`can_procure`)、製造LT (`production_lt`)、調達LT (`procurement_lt_weeks`)、各種最小ロット・刻みロット、売価 (`price`)、原価 (`cost`)、調達単価 (`procurement_unit_cost`) 等を定義します。 |
-| `bom` | 任意 | 部品表マスタ。製造拠点 (`target_location`)、親品目 (`parent_sku`)、子品目 (`child_sku`)、構成員数 (`quantity`)、使用ライン (`line_id`)、時間あたり生産レート (`rate_per_hour`)、歩留まり (`yield_rate`)、スクラップ率 (`scrap_rate`) を定義します。 |
+| `bom` | 任意 | 部品表マスタ。製造拠点 (`target_location`)、親品目 (`parent_sku`)、子品目 (`child_sku`)、構成員数 (`quantity`)、使用ライン (`line_id`)、時間あたり生産レート (`rate_per_hour`)、歩留まり (`yield_rate`)、スクラップ率 (`scrap_rate`)、有効期間 (`valid_from` / `valid_to`: 親の着手週が範囲内の行のみ有効) を定義します。 |
 | `transport_routes` | 任意 | 拠点間輸送ルートマスタ。出荷元 (`from_location`)、入荷先 (`to_location`)、品目 (`sku`)、輸送LT (`transport_lt`)、単位輸送費 (`transport_cost_per_unit`)、輸送ロット、配分比率 (`quota_pct`) を定義します。 |
+| `line_eligibility` | 任意 | 代替ライン（`location` / `sku` / `line_id` / `efficiency_rate`）。主ラインの超過分を代替ラインへ逃がす変数 `PA` を追加し、内訳は `alt_line_usage` に返します。 |
+| `uom_factors` | 任意 | 品目の UOM 換算係数（`sku` / `uom` / `factor`）。`locations[].storage_capacity_uom` と組み合わせて保管能力の消費係数を決めます。 |
+| `init_lots` | 任意 | 期首ロット（`location` / `sku` / `qty` / `expiry_week`）。FEFO で週別の失効見込みを在庫収支に反映します。`init_inventory` が無いペアは合計が期首在庫になります。 |
 | `lines` | 任意 | 製造ライン能力マスタ。拠点 (`location`)、ラインID (`line_id`)、最大能力 (`max_capacity`)、週間稼働時間 (`available_hours_per_week`) を定義します。 |
 | `locations` | 任意 | 拠点マスタ。単位保管コスト (`holding_cost`)、原価比例保管費率 (`holding_cost_rate`)、倉庫最大保管能力 (`max_storage_capacity`) を定義します。 |
 | `init_inventory` | 任意 | 計画開始時点（Week 0 期首）の拠点×品目別初期在庫量 (`qty`)。 |
@@ -244,6 +249,8 @@ $$
 | `elapsed_ms` | `u128` | 前処理からポスト処理完了までの総実行時間（ミリ秒）。 |
 | `facts` | `Array` | 入力された `facts` 全行に対し、最適化後の `production_qty`（生産入庫量）、`replenishment_qty`（補充入庫量）、`production_request`（製造着手指示量）、`replenishment_request`（補充出荷指示量）、`order_release_qty`（外部発注指示量）を反映した完全な計画テーブル。 |
 | `edits` | `Array` | 入力時の `facts` から値が変化したセルのみを抽出した差分リスト。呼び出し側システム（DBやUI）での差分更新（Delta Update）に利用できます。 |
+| `warnings` | `Array` | モデル警告（`firm_qty_not_feasible`、`firm_draw_exceeds_supply`、`alt_line_split_not_persisted`、`lane_split_not_persisted` など）。 |
+| `alt_line_usage` | `Array` | 代替ラインへの割当内訳（計画列には保存されない）。 |
 | `bottlenecks` | `Array` | 能力上限に達して計画を制約している設備・倉庫・週のリスト。`description`（制約の名称）と `marginal_value`（双対変数＝能力を1単位増やした際の目的関数改善額）を含みます。 |
 
 ---
@@ -308,6 +315,7 @@ $$
 
 ### 9.1 前提条件
 * **Rust ツールチェーン**: Rust 1.80 以上（`rustup` 経由でのインストールを推奨）
+* **HiGHS バックエンド用（既定ビルド）**: CMake、C++ コンパイラ（Windows は MinGW / WinLibs、Linux は `build-essential`）、libclang（`LIBCLANG_PATH`）。Windows(gnu) では実行時に `libstdc++-6.dll` / `libgcc_s_seh-1.dll` / `libwinpthread-1.dll` を実行ファイルと同じフォルダに置いてください。不要なら `--no-default-features`。
 * **Python 3.9 以上**（任意：CSV テンプレートから JSON への変換スクリプト [`templates/csv_to_json.py`](templates/csv_to_json.py) を使用する場合のみ。外部パッケージ不要）
 
 ### 9.2 ビルドと自動テストの実行
@@ -318,7 +326,13 @@ cargo test --release
 
 # リリースバイナリ（scm-lp-cli, scm-lp-server）のビルド
 cargo build --release --bins
+
+# HiGHS なし（Pure Rust のみ）でのビルド・テスト
+cargo build --release --bins --no-default-features
+cargo test --no-default-features
 ```
+
+openSCM との数値パリティ固定テストは `tests/parity_test.rs`（`tests/parity/*.json`）です。フィクスチャは openSCM の venv で `tests/parity/gen_parity.py` を実行すると再生成できます。
 
 ビルド完了後、`target/release/` 配下に以下の2つの実行ファイルが生成されます：
 * `scm-lp-cli`（Windows では `scm-lp-cli.exe`）
@@ -452,6 +466,7 @@ scm-lp-optimizer/
 │   ├── graph.rs                       # トポロジカル順序・需要伝播・安全在庫目標・入荷バケット化
 │   ├── lp_model.rs                    # LP変数・目的関数・等式/不等式制約の構築
 │   ├── solver_clarabel.rs             # Clarabel CSC疎行列変換・求解・双対変数抽出
+│   ├── milp.rs                        # HiGHS バックエンド（MILP のロット Z / セットアップ Y、単体法 LP）
 │   ├── postprocess.rs                 # ロット丸め後の能力/供給/過剰在庫クリッピング・結果書き戻し
 │   ├── analytics.rs                   # ライン別週次稼働率・輸送・発注・欠品・SKU別PSI明細集計
 │   ├── qa.rs                          # 自然言語Q&A・欠品/ボトルネックの決定論的因果トレース & Gemini連携
@@ -473,7 +488,10 @@ scm-lp-optimizer/
 │   ├── csv_to_json.py                 # CSV群から入力JSONを生成する変換スクリプト（標準ライブラリのみ）
 │   └── csv/                           # 表計算ソフト (Excel等) 用の CSV 入力テンプレート一式
 └── tests/
-    └── golden_test.rs                 # 統合テストスイート（5テストケース）
+    ├── golden_test.rs                 # 統合テストスイート（ゴールデン5ケース）
+    ├── openscm_sync_*_test.rs         # openSCM 同期機能（目的関数・代替ライン・確定セル・MILP・BOM期間 等）
+    ├── parity_test.rs                 # openSCM との数値パリティ（7シナリオ）
+    └── parity/                        # パリティ用フィクスチャと生成スクリプト gen_parity.py
 ```
 
 ### 詳細ドキュメントリンク

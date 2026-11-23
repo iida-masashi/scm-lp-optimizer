@@ -65,9 +65,9 @@ $$\min \sum_{p=0}^{N-1} \sum_{t=0}^{T-1} \left( c^P_{p, t} P_{p, t} + c^R_{p, t}
 
 各係数の決定ルールは以下の通りです：
 - **在庫保管コスト $c^I_{p, t}$**:
-  - 拠点に原価比例保管費率 `holding_cost_rate` ($r^{\text{hold}}_{\text{loc}}$) があり、品目に原価 `cost` ($\text{cost}_p$) がある場合は $r^{\text{hold}}_{\text{loc}} \times \text{cost}_p$。
+  - 拠点に原価比例保管費率 `holding_cost_rate`（**年率**）があり、品目に原価 `cost` がある場合は $(r^{\text{hold}}_{\text{loc}} / 52) \times \text{cost}_p$（週次換算）。
   - それ以外は拠点の `holding_cost`、未指定時は `config.holding_cost`（デフォルト `1.0`）。
-- **生産コスト $c^P_{p, t}$**: 品目原価 `item_locations.cost`、未指定時は `config.production_cost`（デフォルト `5.0`）。
+- **生産コスト $c^P_{p, t}$**: **付加価値**（品目原価 − 子部品原価合計。子部品係数は `quantity/(1−scrap)/yield`、子の原価は `cost` → `procurement_unit_cost`、負値は 0）に `variable_manufacturing_cost` を加算。BOM を持たない品目は `item_locations.cost`、未指定時は `config.production_cost`（デフォルト `5.0`）。
 - **外部調達コスト $c^E_{p, t}$**: `item_locations.procurement_unit_cost` ➔ `item_locations.cost` ➔ `config.procurement_cost`（デフォルト `0.1`）の優先順。
 - **輸送補充コスト $c^R_{p, t}$ / $c^{\text{tr}}_e$**: ルートの `transport_cost_per_unit`、未指定時は `config.replenishment_cost`（デフォルト `2.0`）。
 - **品切れペナルティ $c^U_{p, t}$**:
@@ -128,13 +128,58 @@ Clarabel の主双対内点法により得られた双対変数（Dual Variables
 
 ## 7. ポスト処理パイプライン (Post-Processing Pipeline)
 
-連続LPの最適解 $x^*$ を実務の離散ロット制約に適合させるため、以下の4段階の決定論的ポスト処理を実行します：
+連続LPの最適解 $x^*$ を実務の離散ロット制約に適合させるため、以下の4段階の決定論的ポスト処理を実行します（`solver = "milp"` ではロット整数が解に含まれるため、丸めは実質的に恒等です）。確定セル（`is_fixed` / フェンス内 / 確定購買）は、いずれの段階でも確定数量のまま保持します：
 
 1. **ロットサイズ丸め (`round_lp_solution`)**:
-   - 各品目・拠点の最小ロット（MOQ: `min_production_qty`, `min_procurement_qty`, `min_shipping_qty`）および刻みロット（`production_lot_size`, `purchase_lot_size`, `shipping_lot_size`）に従い、連続解を切り上げ丸め（Ceiling）します。
+   - 各品目・拠点の最小ロット（MOQ: `min_production_qty`, `min_procurement_qty`, `min_shipping_qty`）および刻みロット（`production_lot_size`, `purchase_lot_size`, `shipping_lot_size`）に従い、連続解を切り上げ丸め（Ceiling）します。内点法解の数値誤差（約 $10^{-8}$）で余計に切り上がらないよう、$\lceil q - 10^{-6}\max(1,q)\rceil$ を用います（openSCM は単体法のため $10^{-9}$）。
 2. **能力上限クリッピング (`clip_by_capacity`)**:
    - ロット切り上げによってライン能力または拠点能力を超過した場合、利益マージン（`price - cost`）が高い品目を優先して能力枠を割り当て、超過分をロット単位で切り詰めます。
 3. **PMU-9b 上流供給連動クリッピング (`clip_transport_to_supply`)**:
-   - 上流拠点での能力クリッピング等の結果、上流から出荷可能な実在庫よりも下流の計画補充量 $R$ が大きくなった場合、トポロジカル順序（上流 ➔ 下流）で実際に供給可能な数量以下に下流の入荷量をクリップします。
+   - 上流拠点での能力クリッピング等の結果、上流から出荷可能な実在庫よりも下流の計画補充量 $R$ が大きくなった場合、トポロジカル順序（上流 ➔ 下流）で実際に供給可能な数量以下に下流の入荷量をクリップします。まず下流の（確定でない）出荷をロット単位で削り、なお不足する場合は上流を消費する BOM 親の生産（確定でないセル）を削ります。それでも不足が残る場合は警告 `firm_draw_exceeds_supply` を返します。
 4. **L-10 過剰在庫クリッピング (`clip_excess_inventory`)**:
-   - ロット丸め等の影響で期末在庫が安全在庫ターゲットの一定倍率（`excess_inventory_buffer_ratio`、デフォルト `1.2` 倍）を超える場合、欠品を起こさない範囲で生産ロットを1ロットずつ削減します。
+   - ロット丸め等の影響で期末在庫が安全在庫ターゲットの一定倍率（`excess_inventory_buffer_ratio`、デフォルト `1.2` 倍）を超える場合、欠品を起こさない範囲で生産ロットを1ロットずつ削減します（確定した生産セルは削りません）。
+
+---
+
+## 8. openSCM 同期で追加された目的関数項（2026-11 時点）
+
+- **供給単位コスト $v_p$**: 供給側から順に、製造（付加価値コスト＋子部品の $v$ の BOM 係数和）／拠点間補充（$\sum \text{mult}\cdot(c_{\text{route}}+v_{\text{src}})$）／購買の最小値。
+- **終端在庫評価**: 最終週の在庫係数を $c^I - \kappa v_p$ とする（`terminal_inventory_value_ratio` = $\kappa$、既定 0.95、[0, 0.99] にクランプ）。
+- **安全在庫割れペナルティ**: $v_p>0$ のとき $\max(c^{SS},\ \min(k\,v_p,\ 0.5\,c^U))$（`ss_penalty_cost_ratio` = $k$、既定 1.0）。
+- **拠点の `allocation_priority`**: 欠品コストを $1+0.05\cdot\max(0,\ \text{max\_prio}-\text{prio}+1)$ 倍する。
+- **輸送補充コスト**: 着地ごとの $\sum \text{mult}\cdot\text{route\_unit\_cost}$（正の単価、なければ `replenishment_cost`）。
+- **BOM 係数**: $\text{quantity}/(1-\text{scrap})/\text{yield}$（yield は親品目の歩留まり）。
+
+### 8.1 データ駆動で有効になる制約・変数
+
+- **代替ライン（`line_eligibility`）**: 品目 $p$ の主ライン超過分を代替ライン $l'$ へ逃がす変数 $PA_{e,t}\ge 0$。$PA_{e,t}\le P_{p,t}$、主ラインの消費は $P-\sum PA$、代替ラインの消費は $PA/\text{eff}$（時間ベースのラインは $1/(r\,\eta\,\text{eff})$）。目的関数の追加コストは $\max(0.01,\ c_{alt}-c_{base})$、$c_{alt}=c_{base}/\text{eff}+0.01\cdot\text{rank}$。内訳は応答の `alt_line_usage`（計画列には保存されない）。
+- **確定セル（`is_fixed` またはフェンス内）**: $P,R$ を確定数量に固定。確定購買（`order_release_qty` 由来）は $E_{t-LT}$ を固定し、$R$ の固定量は $\max(0, R^{firm}-A)$。実行不能のときは確定セルを $[0, qty]$ に緩め、目的関数に $-10\cdot\max(\text{shortage})$ の報酬を付けて再求解し、`firm_qty_not_feasible` の警告を返す。出力では確定数量を復元する。
+- **期首ロット失効（`init_lots`）**: FEFO で需要を消費したときの週別失効見込み量を、在庫バランスの右辺に加算（`min_remaining_shelf_life_weeks` で前倒し）。
+- **保管能力の UOM 換算**: 保管上限の係数を $1/\text{factor}$（`storage_capacity_uom` と `uom_factors`）。
+- **ゴーストペア**: 計画行が無い供給元を、期首在庫と入荷予定だけを持つノードとして追加（`supplier_pair_missing_in_facts`）。
+- **動的ソーシング（`config.dynamic_sourcing`）**: クォータ指定のない着地の全ルートを `TR` 変数にして、LP が経路を選ぶ。
+- **拠点能力行**: 未割当の生産ペアが1つでもある拠点では、その拠点の全生産ペアの合計を拠点能力で制約する。
+
+### 8.2 BOM の有効期間（`valid_from` / `valid_to`）
+
+BOM 行 $e$（子 $c$ → 親 $q$、親の製造LT $\ell$）は、親の完成週 $t_q$ に対し、着手週 $s=\max(0,\ t_q-\ell)$ の週開始日 $w_s$ が $\text{valid\_from}_e \le w_s \le \text{valid\_to}_e$（空欄は無期限）のときだけ有効です。在庫収支の消費項 $-\text{qty}_e\,P_{q,t_q}$、需要伝播（親需要の子への引き当て）、供給単位コスト $v$ の BOM 係数和（$t_q=0$ で判定）、および後処理のクリップで同じ判定を使います。
+
+### 8.3 MILP 定式化（`config.solver = "milp"`）
+
+連続LPの列・行に次を追加し、HiGHS の分枝限定法で解きます（`milp_time_limit_secs` で打ち切り、`milp_relative_gap` で相対ギャップを指定）。確定セルには変数を付けません。
+
+- **ロット整数**: ロット $L>1$ のセルに整数 $Z_{p,t}\ge 0$ を追加し、$P_{p,t}=L\,Z_{p,t}$（出荷 $R$・調達 $E$ も同様）。
+- **最小バッチ・セットアップ**: 二値 $Y_{p,t}$ を追加し、$P\le M\,Y$、$P\ge \text{MOQ}\cdot Y$。`setup_cost` を目的関数の $Y$ 係数に加える。
+- **Big-M**: $M=\max\bigl(\min(U^{hor}_p,\ \bar P_{p,t},\ \text{cap}_{p,t}),\ \text{MOQ},\ L,\ 1\bigr)$。$U^{hor}_p$ は「外部需要＋目標在庫＋失効見込み」を BOM・輸送に沿って上流へ伝播した上限、$\text{cap}_{p,t}$ は主ライン（時間ベースなら $h\,r\,\eta$、数量ベースなら能力）または拠点能力（代替ラインのある品目は除く）。
+- **セットアップ時間**: `setup_time_hours` $\tau$ を、主ラインの能力行へ $Y$ の係数として加える（時間ベースなら $\tau$、数量ベースなら $\tau\cdot\text{cap}/\text{hours}$）。
+- 双対値が得られないため、`bottlenecks` は満杯（活動量 $\ge$ 右辺 $-10^{-4}$）の行を限界値 1.0 で返す。
+
+### 8.4 ソルバーバックエンド
+
+| `config.solver` | 実装 | 特徴 |
+| :--- | :--- | :--- |
+| `lp`（既定） | Clarabel 内点法 | Pure Rust。双対値あり。小数解のため丸め後に openSCM と数ユニットずれることがある |
+| `highs` | HiGHS 単体法 | 頂点解。openSCM と同じソルバーで、`tests/parity/` の7シナリオが全セル一致。双対値あり |
+| `milp` | HiGHS 分枝限定法 | ロット整数・セットアップ。双対値なし |
+
+`highs` / `milp` は `highs` cargo feature（既定で有効）が必要です。

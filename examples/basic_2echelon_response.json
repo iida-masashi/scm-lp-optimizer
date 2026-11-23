@@ -1,8 +1,9 @@
 {
   "status": "optimal",
-  "elapsed_ms": 9,
+  "elapsed_ms": 0,
   "facts": [
     {
+      "is_fixed": false,
       "location": "PLANT-A",
       "sku": "RAW-1",
       "week_start": "2026-01-05",
@@ -18,6 +19,7 @@
       "replenishment_fence_weeks": null
     },
     {
+      "is_fixed": false,
       "location": "PLANT-A",
       "sku": "RAW-1",
       "week_start": "2026-01-12",
@@ -33,6 +35,7 @@
       "replenishment_fence_weeks": null
     },
     {
+      "is_fixed": false,
       "location": "PLANT-A",
       "sku": "RAW-1",
       "week_start": "2026-01-19",
@@ -48,21 +51,23 @@
       "replenishment_fence_weeks": null
     },
     {
+      "is_fixed": false,
       "location": "PLANT-A",
       "sku": "RAW-1",
       "week_start": "2026-01-26",
       "sales_qty": 0.0,
       "dependent_demand_qty": 0.0,
       "production_qty": 0,
-      "replenishment_qty": 0,
+      "replenishment_qty": 20,
       "production_request": 0,
-      "replenishment_request": 0,
-      "order_release_qty": 0,
+      "replenishment_request": 20,
+      "order_release_qty": 20,
       "safety_stock_weeks": null,
       "production_fence_weeks": null,
       "replenishment_fence_weeks": null
     },
     {
+      "is_fixed": false,
       "location": "PLANT-A",
       "sku": "FG-1",
       "week_start": "2026-01-05",
@@ -78,6 +83,7 @@
       "replenishment_fence_weeks": null
     },
     {
+      "is_fixed": false,
       "location": "PLANT-A",
       "sku": "FG-1",
       "week_start": "2026-01-12",
@@ -93,6 +99,7 @@
       "replenishment_fence_weeks": null
     },
     {
+      "is_fixed": false,
       "location": "PLANT-A",
       "sku": "FG-1",
       "week_start": "2026-01-19",
@@ -108,14 +115,15 @@
       "replenishment_fence_weeks": null
     },
     {
+      "is_fixed": false,
       "location": "PLANT-A",
       "sku": "FG-1",
       "week_start": "2026-01-26",
       "sales_qty": 0.0,
       "dependent_demand_qty": 0.0,
-      "production_qty": 0,
+      "production_qty": 10,
       "replenishment_qty": 0,
-      "production_request": 0,
+      "production_request": 10,
       "replenishment_request": 0,
       "order_release_qty": 0,
       "safety_stock_weeks": null,
@@ -123,6 +131,7 @@
       "replenishment_fence_weeks": null
     },
     {
+      "is_fixed": false,
       "location": "DC-EAST",
       "sku": "FG-1",
       "week_start": "2026-01-05",
@@ -138,6 +147,7 @@
       "replenishment_fence_weeks": null
     },
     {
+      "is_fixed": false,
       "location": "DC-EAST",
       "sku": "FG-1",
       "week_start": "2026-01-12",
@@ -153,6 +163,7 @@
       "replenishment_fence_weeks": null
     },
     {
+      "is_fixed": false,
       "location": "DC-EAST",
       "sku": "FG-1",
       "week_start": "2026-01-19",
@@ -168,6 +179,7 @@
       "replenishment_fence_weeks": null
     },
     {
+      "is_fixed": false,
       "location": "DC-EAST",
       "sku": "FG-1",
       "week_start": "2026-01-26",
@@ -216,6 +228,16 @@
     },
     {
       "location": "PLANT-A",
+      "sku": "RAW-1",
+      "week_start": "2026-01-26",
+      "production_qty": 0,
+      "replenishment_qty": 20,
+      "production_request": 0,
+      "replenishment_request": 20,
+      "order_release_qty": 20
+    },
+    {
+      "location": "PLANT-A",
       "sku": "FG-1",
       "week_start": "2026-01-05",
       "production_qty": 130,
@@ -241,6 +263,16 @@
       "production_qty": 110,
       "replenishment_qty": 0,
       "production_request": 110,
+      "replenishment_request": 0,
+      "order_release_qty": 0
+    },
+    {
+      "location": "PLANT-A",
+      "sku": "FG-1",
+      "week_start": "2026-01-26",
+      "production_qty": 10,
+      "replenishment_qty": 0,
+      "production_request": 10,
       "replenishment_request": 0,
       "order_release_qty": 0
     },

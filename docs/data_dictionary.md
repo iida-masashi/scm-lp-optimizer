@@ -135,7 +135,7 @@
 | :--- | :--- | :---: | :---: | :--- |
 | `location` | `String` | **必須** | - | 拠点コード |
 | `holding_cost` | `f64?` | 任意 | `config.holding_cost` | 拠点固有の在庫保管コスト（1単位・1週あたり） |
-| `holding_cost_rate` | `f64?` | 任意 | `null` | 原価比例の在庫保管費率（`cost` に対する週次比率） |
+| `holding_cost_rate` | `f64?` | 任意 | `null` | 原価比例の在庫保管費率（`cost` に対する**年率**。週次係数は rate/52） |
 | `max_storage_capacity` | `f64?` | 任意 | 無制限 | 拠点全体の最大保管在庫数量（全SKU合計） |
 
 ---
@@ -181,3 +181,46 @@
 | `facts` | `Vec<FactRow>` | 最適化された `production_qty`, `replenishment_qty`, `order_release_qty`, `production_request`, `replenishment_request` が書き戻された全ファクト行 |
 | `edits` | `Vec<PlanEditRow>` | 入力時点の値から変化があったセルのみを抽出した差分リスト（DBへの差分UPDATE用） |
 | `bottlenecks` | `Vec<Bottleneck>` | 能力制約がバインド（上限到達）しているライン・拠点・倉庫のシャドウプライス一覧 |
+
+---
+
+## openSCM 同期で追加された入出力（2026-11）
+
+**リクエスト（追加）**
+
+| 場所 | フィールド | 型 | 説明 |
+|---|---|---|---|
+| ルート | `line_eligibility[]` | `{location, sku, line_id, efficiency_rate?}` | 代替ライン。効率が高い順に優先。 |
+| ルート | `uom_factors[]` | `{sku, uom, factor}` | 1 保管単位 = `factor` 基本単位。 |
+| ルート | `init_lots[]` | `{location, sku, qty, expiry_week?}` | 期首ロット。`init_inventory` が無いペアは合計が期首在庫になる。 |
+| `facts[]` | `is_fixed` | `bool` | 確定バケット。P/R を固定。 |
+| `config` | `dynamic_sourcing` | `bool` | 複数ルートの着地で経路選択を LP に任せる。 |
+| `config` | `ss_penalty_cost_ratio` / `terminal_inventory_value_ratio` | `f64` | 既定 1.0 / 0.95。 |
+| `item_locations[]` | `variable_manufacturing_cost` | `f64?` | 生産コストに加算。 |
+| `item_locations[]` | `min_remaining_shelf_life_weeks` | `i64?` | 失効判定の前倒し週数。 |
+| `item_locations[]` | `setup_cost` / `setup_time_hours` | `f64?` | MILP 用（MILP は未移植）。 |
+| `locations[]` | `allocation_priority` | `i64?` | 小さいほど優先。欠品コストを最大 +5%/段階。 |
+| `locations[]` | `storage_capacity_uom` | `string?` | 保管能力の単位（`BASE` / 未指定は基本単位）。 |
+
+**レスポンス（追加）**: `warnings[]`（`code`, `location?`, `sku?`, `week?`, `message`）、`alt_line_usage[]`（`location`, `sku`, `alt_line`, `week_start`, `qty`）。
+
+**既存入力への影響**: `holding_cost_rate` は年率（週次係数は rate/52）。BOM 係数に親の歩留まりを反映（1 超は 1 とみなす）。拠点能力の行は、未割当の生産ペアがある拠点の全生産ペアを対象にする。計画行が無い供給元はゴーストペアとして扱う。
+
+
+## MILP バックエンド（`config.solver = "milp"`）
+
+- `solver`: `"lp"`（既定。Clarabel、双対値あり）、`"highs"`（HiGHS 単体法 LP。openSCM と同じ頂点解、双対値あり）、`"milp"`（HiGHS 分枝限定法）。
+- `milp_time_limit_secs`（既定 60）: HiGHS の時間制限。時間内の最良解を返す。
+- `milp_relative_gap`（既定 0.005）: 相対ギャップ。
+- ロット整数 `Z`（`production_lot_size` / `shipping_lot_size` / `purchase_lot_size`）、最小バッチ・セットアップの binary `Y`（`min_*_qty` / `setup_cost` / `setup_time_hours`）を追加する。確定セルには付けない。
+- MILP には双対値が無いため、`bottlenecks` はほぼ満杯の行を `marginal_value = 1.0` で返す。
+- ビルドには cmake・C++ コンパイラ（MinGW）・libclang が必要（`highs-sys`）。Windows(gnu) では実行時に `libstdc++-6.dll` / `libgcc_s_seh-1.dll` / `libwinpthread-1.dll` を実行ファイルと同じフォルダに置く。
+
+## BOM 有効期間（`bom[].valid_from` / `valid_to`）
+
+- ISO 日付（`YYYY-MM-DD`、両端含む）。省略した側は無期限。
+- 親の完成週 `tp` に対し、着手週 `weeks[max(0, tp - production_lt)]` が範囲内の行だけを有効とする（在庫収支・需要伝播・供給原価・後処理の全てで同じ判定）。
+
+## 確定セルと後処理
+
+- 確定セル（`is_fixed` / フェンス内 / 確定購買）は輸送クリップ・BOM 親生産クリップ・過剰在庫クリップのいずれでも削らない。確定した引当が供給を超える場合は `firm_draw_exceeds_supply` 警告を返す。
