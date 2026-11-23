@@ -6,6 +6,9 @@
 
 ## 1. ローカルでの Docker ビルドと動作確認
 
+> **ビルド要件**: 既定のビルドは HiGHS（`solver = "highs"` / `"milp"`）を C++ からビルドするため、ビルダーイメージに `build-essential` / `cmake` / `clang` / `libclang-dev`、ランタイムイメージに `libstdc++6` が必要です（同梱の `Dockerfile` に反映済み）。ビルド時間は HiGHS のコンパイル分だけ長くなります。Clarabel のみの軽量イメージにする場合は、`Dockerfile` の該当 `apt-get` ブロックを外し、`cargo build --release --no-default-features --bin scm-lp-server --bin scm-lp-cli` とします（この場合 `solver` は `"lp"` のみ）。
+> MILP は `milp_time_limit_secs`（既定 60 秒）で打ち切るため、Cloud Run のリクエストタイムアウトより短く設定してください。
+
 ```bash
 # コンテナイメージのビルド
 docker build -t scm-lp-optimizer:latest .

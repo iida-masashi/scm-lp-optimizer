@@ -91,6 +91,8 @@ def build_payload(csv_dir: Path) -> dict[str, Any]:
                 "rate_per_hour": parse_opt_float(r.get("rate_per_hour")),
                 "yield_rate": parse_opt_float(r.get("yield_rate")),
                 "scrap_rate": parse_opt_float(r.get("scrap_rate")),
+                "valid_from": (r.get("valid_from") or "").strip() or None,
+                "valid_to": (r.get("valid_to") or "").strip() or None,
             }
         )
 
@@ -131,6 +133,10 @@ def build_payload(csv_dir: Path) -> dict[str, Any]:
                 "price": parse_opt_float(r.get("price")),
                 "cost": parse_opt_float(r.get("cost")),
                 "procurement_unit_cost": parse_opt_float(r.get("procurement_unit_cost")),
+                "variable_manufacturing_cost": parse_opt_float(r.get("variable_manufacturing_cost")),
+                "setup_cost": parse_opt_float(r.get("setup_cost")),
+                "setup_time_hours": parse_opt_float(r.get("setup_time_hours")),
+                "min_remaining_shelf_life_weeks": parse_opt_int(r.get("min_remaining_shelf_life_weeks")),
             }
         )
 
@@ -142,6 +148,8 @@ def build_payload(csv_dir: Path) -> dict[str, Any]:
                 "holding_cost": parse_opt_float(r.get("holding_cost")),
                 "holding_cost_rate": parse_opt_float(r.get("holding_cost_rate")),
                 "max_storage_capacity": parse_opt_float(r.get("max_storage_capacity")),
+                "allocation_priority": parse_opt_int(r.get("allocation_priority")),
+                "storage_capacity_uom": (r.get("storage_capacity_uom") or "").strip() or None,
             }
         )
 
@@ -177,6 +185,29 @@ def build_payload(csv_dir: Path) -> dict[str, Any]:
             }
         )
 
+    line_eligibility = [
+        {
+            "location": r["location"].strip(),
+            "sku": r["sku"].strip(),
+            "line_id": r["line_id"].strip(),
+            "efficiency_rate": parse_opt_float(r.get("efficiency_rate")),
+        }
+        for r in read_csv_rows(csv_dir / "line_eligibility.csv")
+    ]
+    uom_factors = [
+        {"sku": r["sku"].strip(), "uom": r["uom"].strip(), "factor": float(r["factor"].strip())}
+        for r in read_csv_rows(csv_dir / "uom_factors.csv")
+    ]
+    init_lots = [
+        {
+            "location": r["location"].strip(),
+            "sku": r["sku"].strip(),
+            "qty": float(r["qty"].strip()),
+            "expiry_week": (r.get("expiry_week") or "").strip() or None,
+        }
+        for r in read_csv_rows(csv_dir / "init_lots.csv")
+    ]
+
     return {
         "config": config,
         "facts": facts,
@@ -189,6 +220,9 @@ def build_payload(csv_dir: Path) -> dict[str, Any]:
         "scheduled_receipts": scheduled_receipts,
         "backorder_skus": [],
         "capacity_overrides": capacity_overrides,
+        "line_eligibility": line_eligibility,
+        "uom_factors": uom_factors,
+        "init_lots": init_lots,
     }
 
 

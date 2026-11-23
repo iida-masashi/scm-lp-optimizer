@@ -128,16 +128,16 @@ Clarabel の主双対内点法により得られた双対変数（Dual Variables
 
 ## 7. ポスト処理パイプライン (Post-Processing Pipeline)
 
-連続LPの最適解 $x^*$ を実務の離散ロット制約に適合させるため、以下の4段階の決定論的ポスト処理を実行します：
+連続LPの最適解 $x^*$ を実務の離散ロット制約に適合させるため、以下の4段階の決定論的ポスト処理を実行します（`solver = "milp"` ではロット整数が解に含まれるため、丸めは実質的に恒等です）。確定セル（`is_fixed` / フェンス内 / 確定購買）は、いずれの段階でも確定数量のまま保持します：
 
 1. **ロットサイズ丸め (`round_lp_solution`)**:
-   - 各品目・拠点の最小ロット（MOQ: `min_production_qty`, `min_procurement_qty`, `min_shipping_qty`）および刻みロット（`production_lot_size`, `purchase_lot_size`, `shipping_lot_size`）に従い、連続解を切り上げ丸め（Ceiling）します。
+   - 各品目・拠点の最小ロット（MOQ: `min_production_qty`, `min_procurement_qty`, `min_shipping_qty`）および刻みロット（`production_lot_size`, `purchase_lot_size`, `shipping_lot_size`）に従い、連続解を切り上げ丸め（Ceiling）します。内点法解の数値誤差（約 $10^{-8}$）で余計に切り上がらないよう、$\lceil q - 10^{-6}\max(1,q)\rceil$ を用います（openSCM は単体法のため $10^{-9}$）。
 2. **能力上限クリッピング (`clip_by_capacity`)**:
    - ロット切り上げによってライン能力または拠点能力を超過した場合、利益マージン（`price - cost`）が高い品目を優先して能力枠を割り当て、超過分をロット単位で切り詰めます。
 3. **PMU-9b 上流供給連動クリッピング (`clip_transport_to_supply`)**:
-   - 上流拠点での能力クリッピング等の結果、上流から出荷可能な実在庫よりも下流の計画補充量 $R$ が大きくなった場合、トポロジカル順序（上流 ➔ 下流）で実際に供給可能な数量以下に下流の入荷量をクリップします。
+   - 上流拠点での能力クリッピング等の結果、上流から出荷可能な実在庫よりも下流の計画補充量 $R$ が大きくなった場合、トポロジカル順序（上流 ➔ 下流）で実際に供給可能な数量以下に下流の入荷量をクリップします。まず下流の（確定でない）出荷をロット単位で削り、なお不足する場合は上流を消費する BOM 親の生産（確定でないセル）を削ります。それでも不足が残る場合は警告 `firm_draw_exceeds_supply` を返します。
 4. **L-10 過剰在庫クリッピング (`clip_excess_inventory`)**:
-   - ロット丸め等の影響で期末在庫が安全在庫ターゲットの一定倍率（`excess_inventory_buffer_ratio`、デフォルト `1.2` 倍）を超える場合、欠品を起こさない範囲で生産ロットを1ロットずつ削減します。
+   - ロット丸め等の影響で期末在庫が安全在庫ターゲットの一定倍率（`excess_inventory_buffer_ratio`、デフォルト `1.2` 倍）を超える場合、欠品を起こさない範囲で生産ロットを1ロットずつ削減します（確定した生産セルは削りません）。
 
 ---
 
@@ -159,3 +159,27 @@ Clarabel の主双対内点法により得られた双対変数（Dual Variables
 - **ゴーストペア**: 計画行が無い供給元を、期首在庫と入荷予定だけを持つノードとして追加（`supplier_pair_missing_in_facts`）。
 - **動的ソーシング（`config.dynamic_sourcing`）**: クォータ指定のない着地の全ルートを `TR` 変数にして、LP が経路を選ぶ。
 - **拠点能力行**: 未割当の生産ペアが1つでもある拠点では、その拠点の全生産ペアの合計を拠点能力で制約する。
+
+### 8.2 BOM の有効期間（`valid_from` / `valid_to`）
+
+BOM 行 $e$（子 $c$ → 親 $q$、親の製造LT $\ell$）は、親の完成週 $t_q$ に対し、着手週 $s=\max(0,\ t_q-\ell)$ の週開始日 $w_s$ が $\text{valid\_from}_e \le w_s \le \text{valid\_to}_e$（空欄は無期限）のときだけ有効です。在庫収支の消費項 $-\text{qty}_e\,P_{q,t_q}$、需要伝播（親需要の子への引き当て）、供給単位コスト $v$ の BOM 係数和（$t_q=0$ で判定）、および後処理のクリップで同じ判定を使います。
+
+### 8.3 MILP 定式化（`config.solver = "milp"`）
+
+連続LPの列・行に次を追加し、HiGHS の分枝限定法で解きます（`milp_time_limit_secs` で打ち切り、`milp_relative_gap` で相対ギャップを指定）。確定セルには変数を付けません。
+
+- **ロット整数**: ロット $L>1$ のセルに整数 $Z_{p,t}\ge 0$ を追加し、$P_{p,t}=L\,Z_{p,t}$（出荷 $R$・調達 $E$ も同様）。
+- **最小バッチ・セットアップ**: 二値 $Y_{p,t}$ を追加し、$P\le M\,Y$、$P\ge \text{MOQ}\cdot Y$。`setup_cost` を目的関数の $Y$ 係数に加える。
+- **Big-M**: $M=\max\bigl(\min(U^{hor}_p,\ \bar P_{p,t},\ \text{cap}_{p,t}),\ \text{MOQ},\ L,\ 1\bigr)$。$U^{hor}_p$ は「外部需要＋目標在庫＋失効見込み」を BOM・輸送に沿って上流へ伝播した上限、$\text{cap}_{p,t}$ は主ライン（時間ベースなら $h\,r\,\eta$、数量ベースなら能力）または拠点能力（代替ラインのある品目は除く）。
+- **セットアップ時間**: `setup_time_hours` $\tau$ を、主ラインの能力行へ $Y$ の係数として加える（時間ベースなら $\tau$、数量ベースなら $\tau\cdot\text{cap}/\text{hours}$）。
+- 双対値が得られないため、`bottlenecks` は満杯（活動量 $\ge$ 右辺 $-10^{-4}$）の行を限界値 1.0 で返す。
+
+### 8.4 ソルバーバックエンド
+
+| `config.solver` | 実装 | 特徴 |
+| :--- | :--- | :--- |
+| `lp`（既定） | Clarabel 内点法 | Pure Rust。双対値あり。小数解のため丸め後に openSCM と数ユニットずれることがある |
+| `highs` | HiGHS 単体法 | 頂点解。openSCM と同じソルバーで、`tests/parity/` の7シナリオが全セル一致。双対値あり |
+| `milp` | HiGHS 分枝限定法 | ロット整数・セットアップ。双対値なし |
+
+`highs` / `milp` は `highs` cargo feature（既定で有効）が必要です。
