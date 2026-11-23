@@ -48,6 +48,8 @@ fn bom(loc: &str, parent: &str, child: &str, qty: f64, line_id: &str) -> BomRow 
         rate_per_hour: None,
         yield_rate: None,
         scrap_rate: None,
+        valid_from: None,
+        valid_to: None,
     }
 }
 

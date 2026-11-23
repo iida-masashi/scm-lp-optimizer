@@ -162,6 +162,12 @@ pub struct BomRow {
     pub yield_rate: Option<f64>,
     #[serde(default)]
     pub scrap_rate: Option<f64>,
+    /// First parent start week (ISO date, inclusive) for which this BOM row applies; open if absent.
+    #[serde(default)]
+    pub valid_from: Option<String>,
+    /// Last parent start week (ISO date, inclusive) for which this BOM row applies; open if absent.
+    #[serde(default)]
+    pub valid_to: Option<String>,
 }
 
 /// Transport route row (`master_transport_routes` after wildcard expansion).

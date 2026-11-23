@@ -98,6 +98,7 @@ pub fn run_optimization(
         });
     }
     let post = extract_postprocess_output(&solve_res.x, &model, req);
+    warnings.extend(post.warnings.iter().cloned());
 
     let line_utilizations =
         compute_line_utilizations(&post.prod_raw, &model, req, &solve_res.bottlenecks);

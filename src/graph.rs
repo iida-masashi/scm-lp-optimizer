@@ -4,6 +4,42 @@ use std::collections::{HashMap, HashSet};
 
 pub const TERMINAL_DEMAND_LOOKBACK_WEEKS: usize = 4;
 
+/// Validity windows (`valid_from` / `valid_to`) of BOM edges, parallel to `bom_consumers[child]`.
+/// An edge applies to a parent completion in week `tp` when the parent's START week
+/// (`weeks[max(0, tp - prod_lt)]`) lies inside the window (openSCM `_bom_edge_active`).
+#[derive(Debug, Clone, Default)]
+pub struct BomWindows {
+    pub windows: HashMap<usize, Vec<(Option<String>, Option<String>)>>,
+    pub weeks: Vec<String>,
+}
+
+impl BomWindows {
+    pub fn active(&self, child: usize, k: usize, tp: usize, prod_lt: i64) -> bool {
+        let Some((vf, vt)) = self.windows.get(&child).and_then(|v| v.get(k)) else {
+            return true;
+        };
+        if vf.is_none() && vt.is_none() {
+            return true;
+        }
+        if self.weeks.is_empty() {
+            return true;
+        }
+        let start = tp.saturating_sub(prod_lt.max(0) as usize).min(self.weeks.len() - 1);
+        let w = &self.weeks[start][..10.min(self.weeks[start].len())];
+        if let Some(f) = vf {
+            if &f[..10.min(f.len())] > w {
+                return false;
+            }
+        }
+        if let Some(t) = vt {
+            if &t[..10.min(t.len())] < w {
+                return false;
+            }
+        }
+        true
+    }
+}
+
 /// Gap in days between each adjacent pair of bucket starts (`solver_lp_model._axis_bucket_days`).
 pub fn axis_bucket_days(weeks: &[String]) -> Result<Vec<i64>, OptimizerError> {
     let mut dates = Vec::with_capacity(weeks.len());
@@ -108,34 +144,42 @@ pub fn propagate_downstream_demand(
     transport_consumers: &HashMap<usize, Vec<(usize, i64, f64)>>,
     n: usize,
     t_len: usize,
+    bom_windows: &BomWindows,
 ) {
-    let mut out_edges: HashMap<usize, Vec<(usize, i64, f64)>> = HashMap::new();
+    let mut out_edges: HashMap<usize, Vec<(usize, i64, f64, Option<(usize, usize)>)>> = HashMap::new();
     for (&src_p, consumers) in transport_consumers {
         for &(dst_p, trans_lt, quota) in consumers {
             out_edges
                 .entry(src_p)
                 .or_default()
-                .push((dst_p, trans_lt, quota));
+                .push((dst_p, trans_lt, quota, None));
         }
     }
     for (&src_p, consumers) in bom_consumers {
-        for &(parent_p, bom_qty, prod_lt) in consumers {
+        for (k, &(parent_p, bom_qty, prod_lt)) in consumers.iter().enumerate() {
             out_edges
                 .entry(src_p)
                 .or_default()
-                .push((parent_p, prod_lt, bom_qty));
+                .push((parent_p, prod_lt, bom_qty, Some((src_p, k))));
         }
     }
 
     let order = supplier_to_consumer_order(n, bom_consumers, transport_consumers);
     for src_p in order {
         if let Some(edges) = out_edges.get(&src_p) {
-            for &(dst_p, lt_raw, mult) in edges {
+            for &(dst_p, lt_raw, mult, edge) in edges {
                 let lt = lt_raw.max(0) as usize;
                 if dst_p == src_p {
                     continue;
                 }
-                let dst_row = demand_for_target[dst_p].clone();
+                let mut dst_row = demand_for_target[dst_p].clone();
+                if let Some((child, k)) = edge {
+                    for (u, v) in dst_row.iter_mut().enumerate() {
+                        if !bom_windows.active(child, k, u, lt_raw) {
+                            *v = 0.0;
+                        }
+                    }
+                }
                 if lt == 0 {
                     for t in 0..t_len {
                         demand_for_target[src_p][t] += mult * dst_row[t];

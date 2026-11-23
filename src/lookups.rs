@@ -22,6 +22,8 @@ pub struct EnrichedBomRow {
     pub quantity: f64,
     pub scrap_rate: f64,
     pub line_id: Option<String>,
+    pub valid_from: Option<String>,
+    pub valid_to: Option<String>,
 }
 
 /// Master-data lookup dictionaries (Rust equivalent of `solver_base._build_master_lookups`).
@@ -165,6 +167,8 @@ pub fn build_master_lookups(
             quantity: r.quantity,
             scrap_rate: normalize_scrap_rate(r.scrap_rate),
             line_id: r.line_id.clone(),
+            valid_from: r.valid_from.clone(),
+            valid_to: r.valid_to.clone(),
         });
     }
 

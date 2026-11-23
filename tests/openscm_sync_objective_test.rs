@@ -59,6 +59,8 @@ fn request() -> OptimizeRequestPayload {
             rate_per_hour: None,
             yield_rate: Some(0.5),
             scrap_rate: Some(0.0),
+            valid_from: None,
+            valid_to: None,
         }],
         item_locations: vec![
             ItemLocationRow {

@@ -456,6 +456,11 @@
         <option value="basic_2echelon">シナリオ2: 標準2階層ネットワーク (PLANT-A ➔ DC-EAST / 欠品ゼロ)</option>
         <option value="multi_plant_quota">シナリオ3: 2工場・2DC クォータ配分＆多段階BOMケース</option>
       </select>
+      <label style="font-size:11.5px; color:#a1a1aa; font-weight:600;">ソルバー:</label>
+      <select id="solverSelect" title="LP: 高速・双対値あり / MILP: ロット整数・セットアップを厳密に扱う(HiGHS)">
+        <option value="lp">LP (Clarabel)</option>
+        <option value="milp">MILP (HiGHS)</option>
+      </select>
       <button class="btn btn-outline" onclick="toggleJsonDrawer()">入力JSON編集 / 読込</button>
       <button class="btn btn-primary" onclick="runOptimization()">最適化を実行</button>
       <span id="solverStatusPill" class="status-pill">READY</span>
@@ -677,6 +682,7 @@
       const key = document.getElementById('scenarioSelect').value;
       if (!EXAMPLES[key]) return;
       currentRequest = JSON.parse(JSON.stringify(EXAMPLES[key]));
+      document.getElementById('solverSelect').value = (currentRequest.config && currentRequest.config.solver) || 'lp';
       document.getElementById('requestJsonArea').value = JSON.stringify(currentRequest, null, 2);
       await runOptimization();
     }
@@ -689,6 +695,7 @@
         try {
           const parsed = JSON.parse(e.target.result);
           currentRequest = parsed;
+          document.getElementById('solverSelect').value = (parsed.config && parsed.config.solver) || 'lp';
           document.getElementById('requestJsonArea').value = JSON.stringify(parsed, null, 2);
           await runOptimization();
         } catch (err) {
@@ -723,6 +730,10 @@
         pill.textContent = 'JSON ERROR';
         return;
       }
+
+      currentRequest.config = currentRequest.config || {};
+      currentRequest.config.solver = document.getElementById('solverSelect').value;
+      document.getElementById('requestJsonArea').value = JSON.stringify(currentRequest, null, 2);
 
       try {
         const res = await fetch('/optimize', {

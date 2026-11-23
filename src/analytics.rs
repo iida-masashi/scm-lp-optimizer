@@ -329,14 +329,17 @@ pub fn compute_sku_psi_details(
             // Compute BOM dependent consumption drawn in week t
             let mut bom_demand = 0.0;
             if let Some(bom_edges) = model.bom_consumers.get(&p) {
-                for &(parent_p, bom_qty, prod_lt) in bom_edges {
+                for (k, &(parent_p, bom_qty, prod_lt)) in bom_edges.iter().enumerate() {
                     let lt = prod_lt.max(0) as usize;
                     if t == 0 {
                         for t_parent in 0..=lt.min(t_len - 1) {
+                            if !model.bom_windows.active(p, k, t_parent, prod_lt) {
+                                continue;
+                            }
                             bom_demand +=
                                 bom_qty * (*prod_raw.get(&(parent_p, t_parent)).unwrap_or(&0) as f64);
                         }
-                    } else if t + lt < t_len {
+                    } else if t + lt < t_len && model.bom_windows.active(p, k, t + lt, prod_lt) {
                         bom_demand +=
                             bom_qty * (*prod_raw.get(&(parent_p, t + lt)).unwrap_or(&0) as f64);
                     }

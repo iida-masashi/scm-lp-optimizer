@@ -51,6 +51,8 @@ fn bom(loc: &str, parent: &str, child: &str, qty: f64, line_id: &str) -> BomRow 
         rate_per_hour: None,
         yield_rate: None,
         scrap_rate: None,
+        valid_from: None,
+        valid_to: None,
     }
 }
 
@@ -178,6 +180,8 @@ fn ghost_supplier_pair_is_added_without_supply_variables() {
         rate_per_hour: None,
         yield_rate: None,
         scrap_rate: None,
+        valid_from: None,
+        valid_to: None,
     }];
     req.transport_routes = vec![TransportRouteRow {
         from_location: "SUPPLIER".to_string(),

@@ -1,7 +1,7 @@
 use crate::graph::supplier_to_consumer_order;
 use crate::lookups::apply_lot_sizing;
 use crate::lp_model::{var_idx, LpModel, SLOT_E, SLOT_I, SLOT_P, SLOT_R};
-use crate::schema::{FactRow, OptimizeRequestPayload, PlanEditRow};
+use crate::schema::{FactRow, ModelWarning, OptimizeRequestPayload, PlanEditRow};
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 pub type PairWeekKey = (usize, usize);
@@ -325,12 +325,17 @@ pub fn clip_by_capacity(prod_raw: &mut HashMap<PairWeekKey, i64>, model: &LpMode
 
 /// PMU-9b: a source cannot ship more than it has (`solver_base._clip_transport_to_supply`).
 pub fn clip_transport_to_supply(
-    prod_raw: &HashMap<PairWeekKey, i64>,
+    prod_raw: &mut HashMap<PairWeekKey, i64>,
     replen_out: &mut HashMap<PairWeekKey, i64>,
     ship_out: &mut HashMap<PairWeekKey, i64>,
     x: &[f64],
     model: &LpModel,
+    warnings: &mut Vec<ModelWarning>,
 ) {
+    // Firmed receipts (fence / `is_fixed` / firm purchase) must never be cut.
+    let prot_r = |p: usize, t: usize| -> bool {
+        model.protected_r.contains(&(p, t)) || model.firm_purchase.contains_key(&(p, t))
+    };
     let t_len = model.t_len;
     let mut order = supplier_to_consumer_order(
         model.n,
@@ -357,10 +362,10 @@ pub fn clip_transport_to_supply(
     };
 
     for p in order {
-        let Some(drains) = model.transport_consumers.get(&p) else {
-            continue;
-        };
-        if drains.is_empty() {
+        let empty: Vec<(usize, i64, f64)> = Vec::new();
+        let drains = model.transport_consumers.get(&p).unwrap_or(&empty);
+        let has_bom = model.bom_consumers.get(&p).map_or(false, |v| !v.is_empty());
+        if drains.is_empty() && !has_bom {
             continue;
         }
         let key = (
@@ -385,8 +390,11 @@ pub fn clip_transport_to_supply(
 
             let mut d_bom = 0.0;
             if let Some(bom_edges) = model.bom_consumers.get(&p) {
-                for &(parent_p, bom_qty, prod_lt) in bom_edges {
+                for (k, &(parent_p, bom_qty, prod_lt)) in bom_edges.iter().enumerate() {
                     for tp in weeks_drawn(t, prod_lt) {
+                        if !model.bom_windows.active(p, k, tp, prod_lt) {
+                            continue;
+                        }
                         let parent_disc = *prod_raw.get(&(parent_p, tp)).unwrap_or(&0) as f64;
                         d_bom += bom_qty * (parent_disc - lp_val(parent_p, tp, SLOT_P));
                     }
@@ -421,6 +429,9 @@ pub fn clip_transport_to_supply(
                     if deficit <= 1e-6 {
                         break;
                     }
+                    if prot_r(dst_p, td) {
+                        continue;
+                    }
                     let shipped = *ship_out.get(&(dst_p, td)).unwrap_or(&0);
                     if shipped <= 0 || mult <= 0.0 {
                         continue;
@@ -446,6 +457,64 @@ pub fn clip_transport_to_supply(
                     cum += (cut as f64) * mult;
                 }
                 if deficit > 1e-6 {
+                    // Cut parent production that draws on this source (never a firmed parent cell).
+                    let mut bom_legs: Vec<(usize, usize, f64)> = Vec::new();
+                    if let Some(edges) = model.bom_consumers.get(&p) {
+                        for (k, &(parent_p, qty, lt)) in edges.iter().enumerate() {
+                            for tp in weeks_drawn(t, lt) {
+                                if model.bom_windows.active(p, k, tp, lt) {
+                                    bom_legs.push((parent_p, tp, qty));
+                                }
+                            }
+                        }
+                    }
+                    let excess = |pp: usize, tp: usize, prod_raw: &HashMap<PairWeekKey, i64>| -> f64 {
+                        *prod_raw.get(&(pp, tp)).unwrap_or(&0) as f64 - lp_val(pp, tp, SLOT_P)
+                    };
+                    bom_legs.sort_by(|a, b| {
+                        excess(b.0, b.1, prod_raw)
+                            .partial_cmp(&excess(a.0, a.1, prod_raw))
+                            .unwrap_or(std::cmp::Ordering::Equal)
+                    });
+                    for (parent_p, tp, qty) in bom_legs {
+                        if deficit <= 1e-6 {
+                            break;
+                        }
+                        let made = *prod_raw.get(&(parent_p, tp)).unwrap_or(&0);
+                        if made <= 0 || qty <= 0.0 || model.protected_p.contains(&(parent_p, tp)) {
+                            continue;
+                        }
+                        let pkey = (
+                            model.all_pairs[parent_p].location.clone(),
+                            model.all_pairs[parent_p].sku.clone(),
+                        );
+                        let (moq, lot) = *model.lookups.production_lot_map.get(&pkey).unwrap_or(&(0, 1));
+                        let lot = lot.max(1);
+                        let keep_raw = ((made as f64) - deficit / qty).max(0.0);
+                        let mut keep = (((keep_raw + 1e-9).floor() as i64) / lot) * lot;
+                        if keep > 0 && keep < moq {
+                            keep = 0;
+                        }
+                        let cut = made - keep;
+                        prod_raw.insert((parent_p, tp), keep);
+                        deficit -= (cut as f64) * qty;
+                        cum += (cut as f64) * qty;
+                    }
+                }
+                if deficit > 1e-6 {
+                    warnings.push(ModelWarning {
+                        code: "firm_draw_exceeds_supply".to_string(),
+                        location: Some(model.all_pairs[p].location.clone()),
+                        sku: Some(model.all_pairs[p].sku.clone()),
+                        week: Some(model.weeks[t].clone()),
+                        message: format!(
+                            "確定済みの引当が供給を {:.1} 超過しています: {}/{} {}",
+                            deficit,
+                            model.all_pairs[p].location,
+                            model.all_pairs[p].sku,
+                            model.weeks[t]
+                        ),
+                    });
                     cum += deficit;
                 }
             }
@@ -515,14 +584,17 @@ pub fn clip_excess_inventory(
 
             let mut bom_out = 0.0;
             if let Some(bom_edges) = model.bom_consumers.get(&p) {
-                for &(parent_p, bom_qty, prod_lt) in bom_edges {
+                for (k, &(parent_p, bom_qty, prod_lt)) in bom_edges.iter().enumerate() {
                     let lt = prod_lt.max(0) as usize;
                     if t == 0 {
                         for t_parent in 0..=lt.min(t_len - 1) {
+                            if !model.bom_windows.active(p, k, t_parent, prod_lt) {
+                                continue;
+                            }
                             bom_out +=
                                 bom_qty * (*prod_raw.get(&(parent_p, t_parent)).unwrap_or(&0) as f64);
                         }
-                    } else if t + lt < t_len {
+                    } else if t + lt < t_len && model.bom_windows.active(p, k, t + lt, prod_lt) {
                         bom_out +=
                             bom_qty * (*prod_raw.get(&(parent_p, t + lt)).unwrap_or(&0) as f64);
                     }
@@ -530,13 +602,14 @@ pub fn clip_excess_inventory(
             }
 
             let mut prod = *prod_raw.get(&(p, t)).unwrap_or(&0);
+            let is_protected_p = model.protected_p.contains(&(p, t));
             let mut replen = *replen_out.get(&(p, t)).unwrap_or(&0) as f64;
             if let Some(ref rec) = model.receipts {
                 replen += rec[p][t];
             }
 
             let target = model.target_inv[p][t];
-            if target > 0.0 {
+            if target > 0.0 && !is_protected_p {
                 let ceiling = target * pair_ratio;
                 let lot_f = p_lot as f64;
                 while prod >= p_lot {
@@ -573,6 +646,7 @@ pub struct PostprocessOutput {
     pub replen_out: HashMap<PairWeekKey, i64>,
     pub release_out: HashMap<PairWeekKey, i64>,
     pub ship_out: HashMap<PairWeekKey, i64>,
+    pub warnings: Vec<ModelWarning>,
 }
 
 /// Full post-processing pipeline returning intermediate clipped maps for analytics.
@@ -583,24 +657,6 @@ pub fn extract_postprocess_output(
 ) -> PostprocessOutput {
     let t_len = model.t_len;
     let (mut prod_raw, mut replen_out, mut release_out) = round_lp_solution(x, model);
-
-    clip_by_capacity(&mut prod_raw, model);
-
-    // PMU-9b shipping clip
-    let mut ship_out: HashMap<PairWeekKey, i64> = HashMap::with_capacity(model.n * t_len);
-    const ZERO_TOL: f64 = 1e-7;
-    for (p, pair) in model.all_pairs.iter().enumerate() {
-        let key = (pair.location.clone(), pair.sku.clone());
-        let (s_min, s_lot) = *model.lookups.shipping_lot_map.get(&key).unwrap_or(&(0, 1));
-        for t in 0..t_len {
-            let r_val = x[var_idx(p, t, SLOT_R, t_len)];
-            let r_pos = if r_val > ZERO_TOL { r_val } else { 0.0 };
-            ship_out.insert((p, t), apply_lot_sizing(r_pos, s_min, s_lot));
-        }
-    }
-
-    clip_transport_to_supply(&prod_raw, &mut replen_out, &mut ship_out, x, model);
-    clip_excess_inventory(&mut prod_raw, &replen_out, &ship_out, model, 1.2);
 
     // Restore firmed cells to their committed quantities (and firm purchase releases).
     let row_of = |p: usize, t: usize| {
@@ -628,6 +684,31 @@ pub fn extract_postprocess_output(
             release_out.insert((p, te as usize), a.round() as i64);
         }
     }
+
+    clip_by_capacity(&mut prod_raw, model);
+
+    // PMU-9b shipping clip
+    let mut ship_out: HashMap<PairWeekKey, i64> = HashMap::with_capacity(model.n * t_len);
+    const ZERO_TOL: f64 = 1e-7;
+    for (p, pair) in model.all_pairs.iter().enumerate() {
+        let key = (pair.location.clone(), pair.sku.clone());
+        let (s_min, s_lot) = *model.lookups.shipping_lot_map.get(&key).unwrap_or(&(0, 1));
+        for t in 0..t_len {
+            let r_val = x[var_idx(p, t, SLOT_R, t_len)];
+            let r_pos = if r_val > ZERO_TOL { r_val } else { 0.0 };
+            ship_out.insert((p, t), apply_lot_sizing(r_pos, s_min, s_lot));
+        }
+    }
+    // Firmed receipts: shipping part = committed quantity minus the firm purchase arrival.
+    for &(p, t) in model.protected_r.iter().chain(model.firm_purchase.keys()) {
+        let q = row_of(p, t).map(|r| r.replenishment_qty).unwrap_or(0) as f64;
+        let a = model.firm_purchase.get(&(p, t)).copied().unwrap_or(0.0);
+        ship_out.insert((p, t), (q - a).max(0.0).round() as i64);
+    }
+    let mut pp_warnings: Vec<ModelWarning> = Vec::new();
+
+    clip_transport_to_supply(&mut prod_raw, &mut replen_out, &mut ship_out, x, model, &mut pp_warnings);
+    clip_excess_inventory(&mut prod_raw, &replen_out, &ship_out, model, 1.2);
 
     // Build lookup maps for write-back
     let mut opt_map: HashMap<(String, String, String), (i64, i64, i64)> =
@@ -715,6 +796,7 @@ pub fn extract_postprocess_output(
         replen_out,
         release_out,
         ship_out,
+        warnings: pp_warnings,
     }
 }
 

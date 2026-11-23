@@ -1,6 +1,6 @@
 use crate::graph::{
     assert_uniform_weekly_axis, bucket_receipts_by_week, compute_safety_stock_target,
-    propagate_downstream_demand, supplier_to_consumer_order,
+    propagate_downstream_demand, supplier_to_consumer_order, BomWindows,
 };
 use crate::lookups::{build_capacity_calendar, build_master_lookups, CapacityCalendar, MasterLookups};
 use crate::schema::{
@@ -49,6 +49,8 @@ pub struct LpModel {
     pub backorder_pairs: HashSet<usize>,
     /// `supplier_p -> Vec<(parent_p, effective_bom_qty, prod_lt)>`
     pub bom_consumers: HashMap<usize, Vec<(usize, f64, i64)>>,
+    /// Validity windows parallel to `bom_consumers`.
+    pub bom_windows: BomWindows,
     /// `supplier_p -> Vec<(dst_p, trans_lt, mult)>`
     pub transport_consumers: HashMap<usize, Vec<(usize, i64, f64)>>,
     /// `Vec<(src_p, dst_p, trans_lt, cost)>` for Network Design formulation
@@ -273,7 +275,10 @@ pub fn compute_supply_unit_costs(model: &LpModel, costs: &[PairCost]) -> Vec<f64
     }
     let mut parent_bom: HashMap<usize, Vec<(usize, f64)>> = HashMap::new();
     for (&child_p, edges) in &model.bom_consumers {
-        for &(parent_p, factor, _lt) in edges {
+        for (k, &(parent_p, factor, lt)) in edges.iter().enumerate() {
+            if !model.bom_windows.active(child_p, k, 0, lt) {
+                continue;
+            }
             parent_bom.entry(parent_p).or_default().push((child_p, factor));
         }
     }
@@ -418,6 +423,7 @@ pub fn build_lp_model(req: &OptimizeRequestPayload) -> Result<Option<LpModel>, O
 
     // BOM adjacency
     let mut bom_consumers: HashMap<usize, Vec<(usize, f64, i64)>> = HashMap::new();
+    let mut bom_win_map: HashMap<usize, Vec<(Option<String>, Option<String>)>> = HashMap::new();
     for r in &lookups.bom_list {
         let src = (r.source_location.clone(), r.child_sku.clone());
         let parent = (r.target_location.clone(), r.parent_sku.clone());
@@ -430,6 +436,10 @@ pub fn build_lp_model(req: &OptimizeRequestPayload) -> Result<Option<LpModel>, O
                 .entry(src_p)
                 .or_default()
                 .push((parent_p, effective_qty, prod_lt));
+            bom_win_map
+                .entry(src_p)
+                .or_default()
+                .push((r.valid_from.clone(), r.valid_to.clone()));
         }
     }
 
@@ -557,12 +567,14 @@ pub fn build_lp_model(req: &OptimizeRequestPayload) -> Result<Option<LpModel>, O
         }
     }
 
+    let bom_windows = BomWindows { windows: bom_win_map, weeks: weeks.clone() };
     propagate_downstream_demand(
         &mut demand_for_target,
         &bom_consumers,
         &transport_consumers,
         n,
         t_len,
+        &bom_windows,
     );
 
     let mut target_inv = vec![vec![0.0; t_len]; n];
@@ -764,6 +776,7 @@ pub fn build_lp_model(req: &OptimizeRequestPayload) -> Result<Option<LpModel>, O
         calendar,
         backorder_pairs,
         bom_consumers,
+        bom_windows,
         transport_consumers,
         transport_edges,
         has_quota_split,
@@ -1003,18 +1016,21 @@ pub fn formulate_lp(model: &LpModel, cfg: &SolverConfig) -> FormulatedLp {
             coeff_map.insert(var_idx(p, t, SLOT_I, t_len), -1.0);
 
             if let Some(bom_edges) = model.bom_consumers.get(&p) {
-                for &(parent_p, bom_qty, prod_lt) in bom_edges {
+                for (k, &(parent_p, bom_qty, prod_lt)) in bom_edges.iter().enumerate() {
                     let lt_u = prod_lt.max(0) as usize;
                     if t == 0 {
                         let max_tp = lt_u.min(t_len - 1);
                         for t_parent in 0..=max_tp {
+                            if !model.bom_windows.active(p, k, t_parent, prod_lt) {
+                                continue;
+                            }
                             *coeff_map
                                 .entry(var_idx(parent_p, t_parent, SLOT_P, t_len))
                                 .or_insert(0.0) -= bom_qty;
                         }
                     } else {
                         let t_parent = t + lt_u;
-                        if t_parent < t_len {
+                        if t_parent < t_len && model.bom_windows.active(p, k, t_parent, prod_lt) {
                             *coeff_map
                                 .entry(var_idx(parent_p, t_parent, SLOT_P, t_len))
                                 .or_insert(0.0) -= bom_qty;

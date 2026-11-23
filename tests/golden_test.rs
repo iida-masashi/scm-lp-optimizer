@@ -75,6 +75,8 @@ fn test_two_echelon_bom_and_transport_lp() {
             rate_per_hour: Some(2.0),
             yield_rate: Some(1.0),
             scrap_rate: Some(0.0),
+            valid_from: None,
+            valid_to: None,
         }],
         init_inventory: vec![InitInventoryRow {
             location: "DC-EAST".to_string(),
@@ -205,6 +207,8 @@ fn test_capacity_bottleneck_shadow_price() {
             rate_per_hour: None,
             yield_rate: Some(1.0),
             scrap_rate: Some(0.0),
+            valid_from: None,
+            valid_to: None,
         }],
         init_inventory: Vec::new(),
         transport_routes: Vec::new(),
@@ -314,6 +318,8 @@ fn test_analytics_root_causes_and_natural_language_qa() {
             rate_per_hour: Some(2.0),
             yield_rate: Some(1.0),
             scrap_rate: Some(0.0),
+            valid_from: None,
+            valid_to: None,
         }],
         init_inventory: vec![InitInventoryRow {
             location: "DC-EAST".to_string(),
